@@ -100,7 +100,7 @@ def igi(sample):
     d = sample.b_thinnest
 
     if sample.hp is None:
-        sample.hp, sample.hm = iad.hg_legendre(sample)
+        sample.hp, sample.hm = iad.phase_legendre(sample)
 
     temp = sample.a_delta_M() * d / 4 / sample.nu
     R = temp * (sample.hm / sample.nu).T
@@ -128,7 +128,7 @@ def diamond(sample):
     II = np.identity(n)
 
     if sample.hp is None:
-        sample.hp, sample.hm = iad.hg_legendre(sample)
+        sample.hp, sample.hm = iad.phase_legendre(sample)
 
     w = sample.twonuw / sample.nu / 2
     temp = sample.a_delta_M() * d * w / 4

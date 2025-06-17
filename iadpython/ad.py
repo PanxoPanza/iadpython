@@ -74,7 +74,10 @@ class Sample():
 
     """
 
-    def __init__(self, a=0, b=1, g=0, d=1, n=1, n_above=1, n_below=1, quad_pts=4):
+    def __init__(self, a=0, b=1, g=0, d=1, 
+                 n=1, n_above=1, n_below=1, quad_pts=4,
+                 pf_type='HG', pf_data=None):
+        
         """Object initialization.
 
         Returns:
@@ -93,6 +96,10 @@ class Sample():
         self.b_above = 0
         self.b_below = 0
         self._quad_pts = quad_pts
+        # ----- phase-function control ----------------------------------
+        self.pf_type = str(pf_type).upper()     # 'HG' or 'TABULATED'
+        self.pf_data = pf_data                  # None or pandas DataFrame
+        # ---------------------------------------------------------------
         self.b_thinnest = None
         self.nu = None
         self.twonuw = None
