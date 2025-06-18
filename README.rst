@@ -95,6 +95,10 @@ The following will do a forward calculation::
     print('  total reflection = %.5f' % uru)
     print('  total transmission = %.5f' % utu)
 
+`Sample` also accepts tabulated phase-function data via the ``pf_data``
+keyword. When ``pf_type`` is ``'TABULATED'``, ``pf_data`` may hold one column per
+wavelength and must have the same length as other wavelength-dependent inputs.
+
 
 Installation
 ------------
