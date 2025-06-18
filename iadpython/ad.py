@@ -12,6 +12,7 @@ Example::
 
 import copy
 import numpy as np
+import pandas as pd
 import iadpython.fresnel
 import iadpython.quadrature
 import iadpython.start
@@ -30,19 +31,19 @@ def stringify(form, x):
         reasonable string
     """
     if x is None:
-        s = 'None'
+        s = "None"
     elif np.isscalar(x) or np.ndim(x) == 0:
         s = form % x
     else:
         mn = min(x)
         mx = max(x)
         s = form % mn
-        s += ' to '
+        s += " to "
         s += form % mx
     return s
 
 
-class Sample():
+class Sample:
     """Container class for details of a sample.
 
     Most things can be changed after creation by assigning to an element.
@@ -74,11 +75,24 @@ class Sample():
 
     """
 
-    def __init__(self, a=0, b=1, g=0, d=1, 
-                 n=1, n_above=1, n_below=1, quad_pts=4,
-                 pf_type='HG', pf_data=None):
-        
+    def __init__(
+        self,
+        a=0,
+        b=1,
+        g=0,
+        d=1,
+        n=1,
+        n_above=1,
+        n_below=1,
+        quad_pts=4,
+        pf_type="HG",
+        pf_data=None,
+    ):
         """Object initialization.
+
+        ``pf_data`` may be a pandas ``DataFrame`` with one column per
+        wavelength when ``pf_type`` is ``'TABULATED'``.  The number of
+        columns must match other wavelength-dependent parameters.
 
         Returns:
             object with all details needed to do a radiative calculation
@@ -97,8 +111,9 @@ class Sample():
         self.b_below = 0
         self._quad_pts = quad_pts
         # ----- phase-function control ----------------------------------
-        self.pf_type = str(pf_type).upper()     # 'HG' or 'TABULATED'
-        self.pf_data = pf_data                  # None or pandas DataFrame
+        self.pf_type = str(pf_type).upper()  # 'HG' or 'TABULATED'
+        self._pf_data = None
+        self.pf_data = pf_data  # None or pandas DataFrame
         # ---------------------------------------------------------------
         self.b_thinnest = None
         self.nu = None
@@ -166,6 +181,18 @@ class Sample():
             self.hm = None
             self._quad_pts = value
 
+    @property
+    def pf_data(self):
+        """Phase function data as DataFrame."""
+        return self._pf_data
+
+    @pf_data.setter
+    def pf_data(self, value):
+        """Set phase data and invalidate cached hp/hm."""
+        self._pf_data = value
+        self.hp = None
+        self.hm = None
+
     def mu_a(self):
         """Absorption coefficient for the sample."""
         if self.a is None or self.b is None or self.d is None:
@@ -196,12 +223,12 @@ class Sample():
 
     def a_delta_M(self):
         """Reduced albedo in delta-M approximation."""
-        af = self.a * (self.g ** self.quad_pts)
+        af = self.a * (self.g**self.quad_pts)
         return (self.a - af) / (1 - af)
 
     def b_delta_M(self):
         """Reduced thickness in delta-M approximation."""
-        af = self.a * (self.g ** self.quad_pts)
+        af = self.a * (self.g**self.quad_pts)
         return (1 - af) * self.b
 
     def as_array(self):
@@ -250,23 +277,23 @@ class Sample():
         # header line
         if title is not None:
             print(title)
-        print("cos_theta |", end='')
+        print("cos_theta |", end="")
         for i in range(n):
-            print("%9.5f" % self.nu[i], end='')
+            print("%9.5f" % self.nu[i], end="")
         print(" |     flux")
-        print("----------+", end='')
+        print("----------+", end="")
         for i in range(n):
-            print("---------", end='')
+            print("---------", end="")
         print("-+---------")
 
         # contents + row fluxes
         for i in range(n):
-            print("%9.5f |" % self.nu[i], end='')
+            print("%9.5f |" % self.nu[i], end="")
             for j in range(n):
                 if a[i, j] < -100 or a[i, j] > 100:
-                    print("    *****", end='')
+                    print("    *****", end="")
                 else:
-                    print("%9.5f" % a[i, j], end='')
+                    print("%9.5f" % a[i, j], end="")
             flux = 0.0
             for j in range(n):
                 flux += a[i, j] * self.twonuw[j]
@@ -279,16 +306,16 @@ class Sample():
         tflux = np.dot(self.twonuw[k:], UXx) * self.n**2
 
         # column fluxes
-        print("----------+", end='')
+        print("----------+", end="")
         for i in range(n):
-            print("---------", end='')
+            print("---------", end="")
         print("-+---------")
-        print("%9s |" % "flux   ", end='')
+        print("%9s |" % "flux   ", end="")
         for i in range(n):
             flux = 0.0
             for j in range(n):
                 flux += a[j, i] * self.twonuw[j]
-            print("%9.5f" % flux, end='')
+            print("%9.5f" % flux, end="")
         print(" |%9.5f\n" % tflux)
 
     def wrarray(self, a, title=None):
@@ -303,21 +330,21 @@ class Sample():
         n = self.quad_pts
 
         # first row
-        print("[[", end='')
+        print("[[", end="")
         for j in range(n - 1):
-            print("%9.5f," % a[0, j], end='')
+            print("%9.5f," % a[0, j], end="")
         print("%9.5f]," % a[0, -1])
 
         for i in range(1, n - 1):
-            print(" [", end='')
+            print(" [", end="")
             for j in range(n - 1):
-                print("%9.5f," % a[i, j], end='')
+                print("%9.5f," % a[i, j], end="")
             print("%9.5f]," % a[i, -1])
 
         # last row
-        print(" [", end='')
+        print(" [", end="")
         for j in range(n - 1):
-            print("%9.5f," % a[-1, j], end='')
+            print("%9.5f," % a[-1, j], end="")
         print("%9.5f]]" % a[-1, -1])
 
     def update_quadrature(self):
@@ -410,8 +437,13 @@ class Sample():
         R12, T12 = iadpython.simple_layer_matrices(self)
 
         # all done if boundaries are not an issue
-        if self.n == 1 and self.n_above == 1 and self.n_below == 1 and \
-                self.b_above == 0 and self.b_below == 0:
+        if (
+            self.n == 1
+            and self.n_above == 1
+            and self.n_below == 1
+            and self.b_above == 0
+            and self.b_below == 0
+        ):
             return R12, R12, T12, T12
 
         # reflection/transmission arrays for top boundary
@@ -427,9 +459,11 @@ class Sample():
 
         # different boundaries on top and bottom
         R02, R20, T02, T20 = iadpython.add_slide_above(
-            self, R01, R10, T01, T10, R12, R12, T12, T12)
+            self, R01, R10, T01, T10, R12, R12, T12, T12
+        )
         R03, R30, T03, T30 = iadpython.add_slide_below(
-            self, R02, R20, T02, T20, R23, R32, T23, T32)
+            self, R02, R20, T02, T20, R23, R32, T23, T32
+        )
 
         return R03, R30, T03, T30
 
@@ -453,36 +487,42 @@ class Sample():
         return URx[-1], UTx[-1], URU, UTU
 
     def rt(self):
-        """Find the total reflected and transmitted flux for a sample.
+        """Find total reflection and transmission.
 
-        This is extended so that arrays can be handled.
+        ``pf_data`` may contain one column per wavelength when ``pf_type`` is
+        ``"TABULATED"``.  Otherwise the ``g`` array provides wavelength
+        variation.  Whenever any wavelength-dependent input is an array, the
+        lengths of ``a``, ``b``, and the phase-function data must match.
         """
         len_a = 0
         len_b = 0
-        len_g = 0
+        len_pf = 0
+
         if not np.isscalar(self.a):
             len_a = len(self.a)
 
         if not np.isscalar(self.b):
             len_b = len(self.b)
 
-        if not np.isscalar(self.g):
-            len_g = len(self.g)
+        if self.pf_type == "TABULATED" and isinstance(self.pf_data, pd.DataFrame):
+            len_pf = self.pf_data.shape[1]
+        elif not np.isscalar(self.g):
+            len_pf = len(self.g)
 
-        thelen = max(len_a, len_b, len_g)
+        thelen = max(len_a, len_b, len_pf)
 
         if thelen == 0:
             R, _, T, _ = self.rt_matrices()
             return self.UX1_and_UXU(R, T)
 
         if len_a and len_b and len_a != len_b:
-            raise RuntimeError('rt: a and b arrays must be same length')
+            raise RuntimeError("rt: a and b arrays must be same length")
 
-        if len_a and len_g and len_a != len_g:
-            raise RuntimeError('rt: a and g arrays must be same length')
+        if len_pf and len_a and len_pf != len_a:
+            raise RuntimeError("rt: pf_data and a arrays must be same length")
 
-        if len_b and len_g and len_b != len_g:
-            raise RuntimeError('rt: b and g arrays must be same length')
+        if len_pf and len_b and len_pf != len_b:
+            raise RuntimeError("rt: pf_data and b arrays must be same length")
 
         ur1 = np.empty(thelen)
         ut1 = np.empty(thelen)
@@ -500,7 +540,10 @@ class Sample():
             if len_b > 0:
                 sample.b = self.b[i]
 
-            if len_g > 0:
+            if self.pf_type == "TABULATED":
+                if len_pf > 0:
+                    sample.pf_data = self.pf_data.iloc[:, [i]]
+            elif len_pf > 0:
                 sample.g = self.g[i]
 
             R, _, T, _ = sample.rt_matrices()
