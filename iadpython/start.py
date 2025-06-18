@@ -321,7 +321,7 @@ def unscattered(s):
 
     for i in range(n):
         nu_outside = iad.cos_snell(s.n, s.nu[i], 1.0)
-        if nu_outside == 0:
+        if nu_outside > 0:
             r, t = iad.specular_rt(s.n_above, s.n, s.n_below,
                                    s.b_above, s.b, s.b_below, nu_outside)
             uru += s.twonuw[i] * r[i, i]

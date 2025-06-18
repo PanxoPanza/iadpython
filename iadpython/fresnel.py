@@ -176,7 +176,7 @@ def fresnel_reflection(n_i, nu_i, n_t):
     dif2 = (n_i * nu_i - n_t * nu_t) ** 2
 
     if np.isscalar(sum1):
-        if nu_i == 0:       # angle is greater than critical angle
+        if nu_t == 0:       # angle is greater than critical angle
             return 1
         return (dif1 / sum1 + dif2 / sum2) / 2
 
@@ -373,7 +373,8 @@ def _specular_rt(n_top, n_slab, n_bot, b_slab, nu, b_top=0, b_bot=0):
     numer = r_bottom * t_top**2 * expo**2
 
     if np.isscalar(denom):
-        denom = 1
+        if denom == 0:
+            denom = 1
     else:
         np.place(denom, denom == 0, 1)
 
