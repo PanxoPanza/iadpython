@@ -208,10 +208,13 @@ class Experiment():
         else:
             self.determine_two_parameter_search()
 
-    def invert_scalar_rt(self):
+    def invert_scalar_rt(self, verbose = True):
         """Find a,b,g for a single experimental measurement.
 
         This routine assumes that `m_r`, `m_t`, and `m_u` are scalars.
+
+        Parameters:
+            verbose: if True, print progress. Default is True.
 
         Returns:
             - `a` is the single scattering albedo of the slab
@@ -261,11 +264,12 @@ class Experiment():
             if self.grid.is_stale(grid_constant):
                 self.grid.calc(self, grid_constant)
             a, b, g = self.grid.min_abg(self.m_r, self.m_t)
-            print('grid constant %8.5f' % grid_constant)
+            if verbose:
+                print('grid constant %8.5f' % grid_constant)
 
-            print('grid start a=%8.5f' % a)
-            print('grid start b=%8.5f' % b)
-            print('grid start g=%8.5f' % g)
+                print('grid start a=%8.5f' % a)
+                print('grid start b=%8.5f' % b)
+                print('grid start g=%8.5f' % g)
 
         if self.search == 'find_ab':
             x = scipy.optimize.Bounds(np.array([0, 0]), np.array([1, np.inf]))
@@ -289,10 +293,13 @@ class Experiment():
         print('.', end='', file=sys.stderr)
         sys.stderr.flush()
 
-    def invert_rt(self):
+    def invert_rt(self, verbose=True):
         """Find a,b,g for experimental measurements.
 
         This method works if `m_r`, `m_t`, and `m_u` are scalars or arrays.
+
+        Parameters:
+            verbose: if True, print progress. Default is True.
 
         Returns:
             - `a` is the single scattering albedo of the slab
@@ -330,7 +337,7 @@ class Experiment():
                 x.m_t = self.m_t[i]
             if self.m_u is not None:
                 x.m_u = self.m_u[i]
-            a[i], b[i], g[i] = x.invert_scalar_rt()
+            a[i], b[i], g[i] = x.invert_scalar_rt(verbose = verbose)
             self.print_dot()
 
         print(file=sys.stderr)
