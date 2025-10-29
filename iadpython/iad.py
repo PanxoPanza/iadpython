@@ -208,7 +208,7 @@ class Experiment():
         else:
             self.determine_two_parameter_search()
 
-    def invert_scalar_rt(self, verbose = True):
+    def invert_scalar_rt(self, verbose = False):
         """Find a,b,g for a single experimental measurement.
 
         This routine assumes that `m_r`, `m_t`, and `m_u` are scalars.
@@ -293,7 +293,7 @@ class Experiment():
         print('.', end='', file=sys.stderr)
         sys.stderr.flush()
 
-    def invert_rt(self, verbose=True):
+    def invert_rt(self, verbose=False):
         """Find a,b,g for experimental measurements.
 
         This method works if `m_r`, `m_t`, and `m_u` are scalars or arrays.
@@ -338,7 +338,8 @@ class Experiment():
             if self.m_u is not None:
                 x.m_u = self.m_u[i]
             a[i], b[i], g[i] = x.invert_scalar_rt(verbose = verbose)
-            self.print_dot()
+            if verbose:
+                self.print_dot()
 
         print(file=sys.stderr)
         return a, b, g
