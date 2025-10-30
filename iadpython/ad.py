@@ -87,6 +87,8 @@ class Sample:
         quad_pts=4,
         pf_type="HG",
         pf_data=None,
+        temperature=None,
+        emissivity=None,
     ):
         """Object initialization.
 
@@ -110,11 +112,11 @@ class Sample:
         self.b_above = 0
         self.b_below = 0
         self._quad_pts = quad_pts
-        # ----- phase-function control ----------------------------------
         self.pf_type = str(pf_type).upper()  # 'HG' or 'TABULATED'
         self._pf_data = None
         self.pf_data = pf_data  # None or pandas DataFrame
-        # ---------------------------------------------------------------
+        self.temperature = temperature
+        self.emissivity = emissivity
         self.b_thinnest = None
         self.nu = None
         self.twonuw = None
@@ -259,7 +261,10 @@ class Sample:
             s += "   bottom slide OD     = %s\n" % stringify("%.3f", self.b_below)
         s += "   cos(theta incident) = %s\n" % stringify("%.3f", self.nu_0)
         s += "   quadrature points   = %d\n" % self.quad_pts
-
+        if self.temperature is not None:
+            s += "   temperature         = %s K\n" % stringify("%.1f", self.temperature)
+        if self.emission is not None:
+            s += "   emission            = %s\n" % stringify("%.3f", self.emission)
         s += "\n"
         s += "Derived quantities\n"
         s += "   mu_a                = %s 1/mm\n" % stringify("%.3f", self.mu_a())

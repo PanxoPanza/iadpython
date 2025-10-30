@@ -106,8 +106,11 @@ def igi(sample):
     R = temp * (sample.hm / sample.nu).T
     T = temp * (sample.hp / sample.nu).T
     T += (1 - d / sample.nu) / sample.twonuw * np.identity(n)
-
-    return R, T
+    
+    ### ADD y0 and z0 initialization
+    y0 = (1 - sample.a_delta_M()) * d /(2 * sample.nu)
+    z0 = np.zeros_like(y0)
+    return R, T, y0, z0
 
 
 def diamond(sample):

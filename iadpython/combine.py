@@ -32,7 +32,9 @@ __all__ = ('add_layers',
            )
 
 
-def add_layers_basic(sample, R10, T01, R12, R21, T12, T21):
+def add_layers_basic(sample, 
+                     R10, T01, R12, R21, T12, T21,
+                     s01=None, s21=None, s12=None):
     """Add two layers together.
 
     The basic equations for the adding-doubling sample (neglecting sources) are
@@ -62,7 +64,7 @@ def add_layers_basic(sample, R10, T01, R12, R21, T12, T21):
     Args:
         sample: Sample object
         R10: reflection matrix for light moving upwards 1->0
-        T01: transmission array for light moving downwards 1->2
+        T01: transmission array for light moving downwards 0->1
         R12: reflection matrix for light moving downwards 1->2
         R21: reflection matrix for light moving upwards 2->1
         T12: transmission matrix for light moving downwards 1->2
@@ -78,7 +80,10 @@ def add_layers_basic(sample, R10, T01, R12, R21, T12, T21):
     B = np.linalg.solve(A.T, T12.T).T
     R20 = B @ R10 @ C @ T21 + R21
     T02 = B @ T01
-    return R20, T02
+    
+    s02 = s12 + B @ (s01 + R10 @ C @ s21)
+
+    return R20, T02, s02
 
 
 def add_layers(sample, R01, R10, T01, T10, R12, R21, T12, T21):
@@ -266,7 +271,11 @@ def add_slide_below(sample, R01, R10, T01, T10, R12, R21, T12, T21):
     return R02, R20, T02, T20
 
 
-def add_same_slides(sample, R01, R10, T01, T10, R, T):
+def add_same_slides(sample, 
+                    R01, R10, 
+                    T01, T10, 
+                    R, T, 
+                    s01, s):
     """Find matrix when slab is sandwiched between identical slides.
 
     This routine is optimized for a slab with equal boundaries on each side.
@@ -318,11 +327,13 @@ def add_same_slides(sample, R01, R10, T01, T10, R, T):
     X = np.identity(n) - R10 * R
     AXX = np.linalg.solve(X, T.T).T
     R20 = (AXX * R10) @ T + R
+    # s02 = s + AXX @ (s01 + R10 @ s)
 
     X = np.identity(n) - R20 * R10
     BXX = scipy.linalg.solve(X.T, np.diagflat(T10)).T
     T03 = BXX @ AXX * T01
     R30 = BXX @ R20 * T01
     R30 += np.diagflat(R01 / sample.twonuw**2)
+    # s03 = s02 + BXX @ (s + R20 @ s01)
 
-    return R30, T03
+    return R30, T03, s03
