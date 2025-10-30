@@ -137,20 +137,12 @@ def phase_legendre(sample, *, deltam=True):
 
     # -------------------------------------------- optional δ-M trunc
     if deltam:
-        f_spike = a_raw[2*n]
-        if not (0.0 <= f_spike < 1.0):
-            # you can raise, clip, or fall back to isotropic
-            print(f"Warning: invalid forward spike fraction: f_spike={f_spike:.4f}. Clipping to [0,1).")
-            f_spike = np.clip(f_spike, 0.0, 1.0)
-
-        den = 1.0 - f_spike
-        if den < 1e-10:
-            print(f"Warning: f_spike too large, δ–M ill-conditioned")
-            den = 1e-10
-        a_use = (a_raw[:n] - f_spike) / den
-
+        f_spike_end = 1 - 1E-10
+        f_spike = float(np.clip(a_raw[2*n], 0.0, f_spike_end)) # clip forward spike fraction to [0, 1)
+        a_use = (a_raw[:n] - f_spike) / (1.0 - f_spike)
         Lmax    = n
         P_use   = P[:Lmax]
+
     else:
         a_use   = a_raw[:2*n+1]
         Lmax    = 2*n+1
