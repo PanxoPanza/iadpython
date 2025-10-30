@@ -276,11 +276,11 @@ class Experiment():
             _ = scipy.optimize.minimize(abfun, [a, b], args=(self), bounds=x, method='Nelder-Mead')
 
         if self.search == 'find_ag':
-            x = scipy.optimize.Bounds(np.array([0, -1]), np.array([1, 1]))
+            x = scipy.optimize.Bounds(np.array([0, -0.999]), np.array([1, 0.999]))
             _ = scipy.optimize.minimize(agfun, [a, g], args=(self), bounds=x, method='Nelder-Mead')
 
         if self.search == 'find_bg':
-            x = scipy.optimize.Bounds(np.array([0, -1]), np.array([np.inf, 1]))
+            x = scipy.optimize.Bounds(np.array([0, -0.999]), np.array([np.inf, 0.999]))
             _ = scipy.optimize.minimize(bgfun, [b, g], args=(self), bounds=x, method='Nelder-Mead')
 
         return self.sample.a, self.sample.b, self.sample.g
