@@ -56,31 +56,33 @@ def legendre_coeffs_from_df(
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")
     
-    mu = df.index.to_numpy()
-    if not (np.all(np.diff(mu) > 0) or np.all(np.diff(mu) < 0)):
-        raise ValueError("DataFrame index (μ) must be strictly monotonic.")
-
     df = df.sort_index()                  # ascending μ for CubicSpline
     mu = df.index.to_numpy()              # ascending version
-    p  = df.to_numpy().T                 # shape (nλ, Nμ)
+    p  = df.to_numpy().T                  # shape (nλ, Nμ)
 
     if n_mom is None:
         n_mom = 2 * quad_pts + 1          # Wiscombe default
 
     nλ = p.shape[0]
-    a_raw = np.zeros((n_mom, nλ))
 
-    g_x, g_w = leggauss(128)                    # 128-pt global GL rule
+    # Adaptive quadrature: use fewer points for smaller n_mom
+    nquad = max(32, min(128, 4 * n_mom))
+    g_x, g_w = leggauss(nquad)
 
-    # affine-map from [-1,1] to tabulation domain [-1,1] (already same here)
-    # evaluate spline and P_l once:
-    P_all = np.array([eval_legendre(l, g_x) for l in range(n_mom)])   # (n_mom,128)
+    # Evaluate Legendre polynomials once at quadrature nodes
+    P_all = np.array([eval_legendre(l, g_x) for l in range(n_mom)])   # (n_mom, nquad)
 
-    for col, y in enumerate(p):                # spline for this spectrum
+    # Vectorized spline evaluation: build all splines and evaluate at once
+    vals_all = np.zeros((nquad, nλ))
+    for col, y in enumerate(p):
         f = CubicSpline(mu, y, bc_type=spline_bc)
-        vals = f(g_x)                          # p(μ) on Gauss nodes
-        a_raw[:, col] = (P_all * vals).dot(g_w)      # ∑ w_i p_i P_l(μ_i)
-        a_raw[:, col] /= a_raw[0, col]               # normalise
+        vals_all[:, col] = f(g_x)
+
+    # Vectorized integration: compute all moments for all spectra at once
+    a_raw = P_all @ (vals_all * g_w[:, None])  # (n_mom, nquad) @ (nquad, nλ) = (n_mom, nλ)
+    
+    # Normalize so a_0 = 1 for each spectrum
+    a_raw /= a_raw[0, :]
 
     return a_raw
 

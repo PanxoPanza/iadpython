@@ -17,6 +17,8 @@ import iadpython.fresnel
 import iadpython.quadrature
 import iadpython.start
 import iadpython.combine
+from scipy.interpolate import CubicSpline as _CubicSpline
+from scipy.integrate import quad as _quad
 
 
 def stringify(form, x):
@@ -129,6 +131,7 @@ class Sample:
     @n.setter
     def n(self, value):
         """When index is changed quadrature becomes invalid."""
+        print(value)
         if value != self._n:
             self.nu = None
             self.twonuw = None
@@ -478,14 +481,43 @@ class Sample:
         nu_c = self.nu_c()
         # identify index of first quadrature angle greater than the critical angle
         k = np.min(np.where(self.nu > nu_c))
-
-        URx = np.dot(self.twonuw[k:], R[k:, k:])
-        UTx = np.dot(self.twonuw[k:], T[k:, k:])
-        URU = np.dot(self.twonuw[k:], URx) * self.n**2
-        UTU = np.dot(self.twonuw[k:], UTx) * self.n**2
+        URx = np.dot(self.twonuw[k:], R[k:, k:])       # Reflectance collimated incident flux
+        UTx = np.dot(self.twonuw[k:], T[k:, k:])       # Transmittance collimated incident flux
+        URU = np.dot(self.twonuw[k:], URx) * self.n**2 # Reflected diffuse (Lambertian) flux
+        UTU = np.dot(self.twonuw[k:], UTx) * self.n**2 # Transmitted diffuse (Lambertian) flux
 
         return URx[-1], UTx[-1], URU, UTU
 
+    def rt_diffuse_cone(self, R, T, nu_min=0, nu_max=1):
+        """Find average reflection and transmission for collimated incident flux over a cone.
+        The approximation is usefull to simulate coarse roughness (compared to the wavelength) 
+        on the surface of the sample.
+
+        Parameters:
+            R: reflection matrix
+            T: transmission matrix
+            nu_min: cosine of minimum angle in cone
+            nu_max: cosine of maximum angle in cone
+        Returns:
+            reflected and transmitted fluxes over the cone
+        """
+        nu_c = self.nu_c()
+        nu_min = max(nu_min, nu_c)
+        
+        # identify index of first quadrature angle greater than the critical angle
+        k = np.min(np.where(self.nu > nu_c))
+        URx = np.dot(self.twonuw[k:], R[k:, k:])
+        UTx = np.dot(self.twonuw[k:], T[k:, k:])
+        
+        # creaate interpolation functions for integration
+        UR_nu = _CubicSpline(self.nu[k:], URx)
+        UT_nu = _CubicSpline(self.nu[k:], UTx)
+
+        # Get average reflectance and transmittance over the cone
+        UR_cone = _quad(UR_nu, nu_min, nu_max)[0] / (nu_max - nu_min)
+        UT_cone = _quad(UT_nu, nu_min, nu_max)[0]  / (nu_max - nu_min)
+        return UR_cone, UT_cone
+    
     def rt(self):
         """Find total reflection and transmission.
 
