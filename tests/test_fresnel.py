@@ -90,7 +90,7 @@ class Fresnel(unittest.TestCase):
         r = iad.fresnel.fresnel_reflection(n_i, nu_i, n_t)
         np.testing.assert_approx_equal(r, 0)
 
-#       90° incident light is tricky
+        #       90° incident light is tricky
         nu_i = 0.0
         r = iad.fresnel.fresnel_reflection(n_i, nu_i, n_t)
         np.testing.assert_approx_equal(r, 0)
@@ -485,7 +485,7 @@ class Specular(unittest.TestCase):
         n_bot = 1.4
         b_slab = np.inf
         nu_i = np.array([0.01, 0.2, 0.5, 0.8, 1.0])  # in air
-        nu_in = iad.cos_snell(1, nu_i, n_slab)       # in slab
+        nu_in = iad.cos_snell(1, nu_i, n_slab)  # in slab
         r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_in)
         rr, _ = iad.absorbing_glass_RT(1, n_top, n_slab, nu_i, 0)
         tt = np.zeros_like(nu_i)
@@ -499,7 +499,7 @@ class Specular(unittest.TestCase):
         n_bot = 1.4
         b_slab = np.inf
         nu_i = np.array([0.01, 0.2, 0.5, 0.8, 1.0])  # in air
-        nu_in = iad.cos_snell(1, nu_i, n_slab)       # in slab
+        nu_in = iad.cos_snell(1, nu_i, n_slab)  # in slab
         r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_in, flip=True)
         rr, _ = iad.absorbing_glass_RT(1, n_bot, n_slab, nu_i, 0)
         tt = np.zeros_like(nu_i)
@@ -520,6 +520,7 @@ class Specular(unittest.TestCase):
         np.testing.assert_allclose(r, rr, atol=1e-4)
         np.testing.assert_allclose(t, tt, atol=1e-4)
 
+
 #     def test_09_specular(self):
 #         """Slide on bottom and top with oblique incidence."""
 #         n_top = 1.5
@@ -536,5 +537,5 @@ class Specular(unittest.TestCase):
 #         np.testing.assert_allclose(t, tt, atol=1e-4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

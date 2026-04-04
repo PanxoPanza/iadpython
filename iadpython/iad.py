@@ -24,14 +24,25 @@ import numpy as np
 import scipy.optimize
 import iadpython as iad
 
+G_BOUND_EPS = 1e-6
 
-class Experiment():
+
+class Experiment:
     """Container class for details of an experiment."""
 
-    def __init__(self,
-                 r=None, t=None, u=None, sample=None,
-                 r_sphere=None, t_sphere=None, num_spheres=0,
-                 default_a=None, default_b=None, default_g=None):
+    def __init__(
+        self,
+        r=None,
+        t=None,
+        u=None,
+        sample=None,
+        r_sphere=None,
+        t_sphere=None,
+        num_spheres=0,
+        default_a=None,
+        default_b=None,
+        default_g=None,
+    ):
         """Object initialization."""
         if sample is None:
             self.sample = iad.Sample()
@@ -54,6 +65,7 @@ class Experiment():
         self.flip_sample = False
         self.fraction_of_rc_in_mr = 1
         self.fraction_of_tc_in_mt = 1
+        self.f_r = 0.0
 
         self.ur1_lost = 0
         self.uru_lost = 0
@@ -68,15 +80,22 @@ class Experiment():
         self.default_mua = None
         self.default_mus = None
 
-        self.search = 'unknown'
+        self.search = "unknown"
         self.metric = 1
-        self.tolerance = 1
-        self.MC_tolerance = 1
+        self.tolerance = 0.0001
+        self.MC_tolerance = 0.01
         self.final_distance = 1
         self.iterations = 1
         self.error = 1
         self.num_measurements = 0
         self.grid = None
+        self.method = "unknown"
+        self.debug_level = 0
+        self.max_mc_iterations = 19
+        self.n_photons = 100000
+        self.use_adaptive_grid = True
+        self.adaptive_grid_tol = 0.03
+        self.adaptive_grid_max_depth = 6
         self.counter = 0
         self.include_measurements = True
 
@@ -113,9 +132,11 @@ class Experiment():
     def check_measurements(self):
         """Make sure measurements are sane."""
         between = " Must be between 0 and 1."
-        if not (self.m_r is None or np.isscalar(self.m_r)) or \
-           not (self.m_t is None or np.isscalar(self.m_t)) or \
-           not (self.m_u is None or np.isscalar(self.m_u)):
+        if (
+            not (self.m_r is None or np.isscalar(self.m_r))
+            or not (self.m_t is None or np.isscalar(self.m_t))
+            or not (self.m_u is None or np.isscalar(self.m_u))
+        ):
             raise ValueError("invert_scalar_rt() is only for scalar m_r, m_t, m_u")
 
         if self.m_r is not None:
@@ -143,64 +164,64 @@ class Experiment():
     def determine_one_parameter_search(self):
         """Establish proper search when only one measurement is available."""
         # default case
-        self.search = 'find_a'
+        self.search = "find_a"
 
         # albedo is known
         if self.default_a is not None:
             if self.default_b is None:
-                self.search = 'find_b'
+                self.search = "find_b"
             else:
-                self.search = 'find_g'
+                self.search = "find_g"
 
         # optical thickness is known
         elif self.default_b is not None:
-            self.search = 'find_a'
+            self.search = "find_a"
 
         # anisotropy is known
         elif self.default_g is not None:
-            self.search = 'find_a'
+            self.search = "find_a"
 
         # scattering coefficient is known
         elif self.default_bs is not None:
-            self.search = 'find_ba'
+            self.search = "find_ba"
 
         # absorption coefficient is known
         elif self.default_ba is not None:
-            self.search = 'find_bs'
+            self.search = "find_bs"
 
     def determine_two_parameter_search(self):
         """Establish proper search when 2 or 3 measurements are available."""
         # albedo is known
         if self.default_a is not None:
-            self.search = 'find_bg'
+            self.search = "find_bg"
 
         # optical thickness is known
         elif self.default_b is not None:
-            self.search = 'find_ag'
+            self.search = "find_ag"
 
         # anisotropy is known
         elif self.default_g is not None:
-            self.search = 'find_ab'
+            self.search = "find_ab"
 
         # scattering coefficient is known
         elif self.default_bs is not None:
-            self.search = 'find_bag'
+            self.search = "find_bag"
 
         # absorption coefficient is known
         elif self.default_ba is not None:
-            self.search = 'find_bsg'
+            self.search = "find_bsg"
 
         # by this point, assume that M_R, M_T, and M_U are known
         else:
             if self.m_u is None or self.m_u <= 0:
-                self.search = 'find_ab'
+                self.search = "find_ab"
             else:
-                self.search = 'find_ag'
+                self.search = "find_ag"
 
     def determine_search(self):
         """Determine type of search to do."""
         if self.num_measurements == 0:
-            self.search = 'unknown'
+            self.search = "unknown"
 
         if self.num_measurements == 1:
             self.determine_one_parameter_search()
@@ -233,36 +254,54 @@ class Experiment():
         self.sample.b = self.default_b or self.what_is_b()
         self.sample.g = self.default_g or 0
 
-#        print('search is', self.search)
-#        print('     a = ', self.sample.a)
-#        print('     b = ', self.sample.b)
-#        print('     g = ', self.sample.g)
+        #        print('search is', self.search)
+        #        print('     a = ', self.sample.a)
+        #        print('     b = ', self.sample.b)
+        #        print('     g = ', self.sample.g)
 
-        if self.search == 'find_a':
-            _ = scipy.optimize.minimize_scalar(afun, args=(self), bounds=(0, 1), method='bounded')
+        if self.search == "find_a":
+            _ = scipy.optimize.minimize_scalar(afun, args=(self), bounds=(0, 1), method="bounded")
 
-        if self.search == 'find_b':
-            _ = scipy.optimize.minimize_scalar(bfun, args=(self), method='brent')
+        if self.search == "find_b":
+            _ = scipy.optimize.minimize_scalar(bfun, args=(self), method="brent")
 
-        if self.search == 'find_g':
-            _ = scipy.optimize.minimize_scalar(gfun, args=(self), bounds=(-1, 1), method='bounded')
+        if self.search == "find_g":
+            _ = scipy.optimize.minimize_scalar(
+                gfun,
+                args=(self),
+                bounds=(-1 + G_BOUND_EPS, 1 - G_BOUND_EPS),
+                method="bounded",
+            )
 
-        if self.search in ['find_ab', 'find_ag', 'find_bg']:
+        if self.search in ["find_ab", "find_ag", "find_bg"]:
 
             if self.grid is None:
+                if self.use_adaptive_grid:
+                    self.grid = iad.AGrid(tol=self.adaptive_grid_tol, max_depth=self.adaptive_grid_max_depth)
+                else:
+                    self.grid = iad.Grid()
+
+            if self.use_adaptive_grid and not isinstance(self.grid, iad.AGrid):
+                self.grid = iad.AGrid(tol=self.adaptive_grid_tol, max_depth=self.adaptive_grid_max_depth)
+            if not self.use_adaptive_grid and isinstance(self.grid, iad.AGrid):
                 self.grid = iad.Grid()
 
             # the grids are two-dimensional, one value is held constant
             grid_constant = None
-            if self.search == 'find_ag':
+            if self.search == "find_ag":
                 grid_constant = self.sample.b
-            if self.search == 'find_bg':
+            if self.search == "find_bg":
                 grid_constant = self.sample.a
-            if self.search == 'find_ab':
+            if self.search == "find_ab":
                 grid_constant = self.sample.g
 
-            if self.grid.is_stale(grid_constant):
-                self.grid.calc(self, grid_constant)
+            if isinstance(self.grid, iad.AGrid):
+                if self.grid.is_stale(grid_constant, search=self.search):
+                    self.grid.calc(self, default=grid_constant, search=self.search)
+            else:
+                if self.grid.is_stale(grid_constant):
+                    self.grid.calc(self, grid_constant)
+
             a, b, g = self.grid.min_abg(self.m_r, self.m_t)
             if verbose:
                 print('grid constant %8.5f' % grid_constant)
@@ -273,15 +312,21 @@ class Experiment():
 
         if self.search == 'find_ab':
             x = scipy.optimize.Bounds(np.array([0, 0]), np.array([1, np.inf]))
-            _ = scipy.optimize.minimize(abfun, [a, b], args=(self), bounds=x, method='Nelder-Mead')
+            _ = scipy.optimize.minimize(abfun, [a, b], args=(self), bounds=x, method="Nelder-Mead")
 
-        if self.search == 'find_ag':
-            x = scipy.optimize.Bounds(np.array([0, -1]), np.array([1, 1]))
-            _ = scipy.optimize.minimize(agfun, [a, g], args=(self), bounds=x, method='Nelder-Mead')
+        if self.search == "find_ag":
+            x = scipy.optimize.Bounds(
+                np.array([0, -1 + G_BOUND_EPS]),
+                np.array([1, 1 - G_BOUND_EPS]),
+            )
+            _ = scipy.optimize.minimize(agfun, [a, g], args=(self), bounds=x, method="Nelder-Mead")
 
-        if self.search == 'find_bg':
-            x = scipy.optimize.Bounds(np.array([0, -1]), np.array([np.inf, 1]))
-            _ = scipy.optimize.minimize(bgfun, [b, g], args=(self), bounds=x, method='Nelder-Mead')
+        if self.search == "find_bg":
+            x = scipy.optimize.Bounds(
+                np.array([0, -1 + G_BOUND_EPS]),
+                np.array([np.inf, 1 - G_BOUND_EPS]),
+            )
+            _ = scipy.optimize.minimize(bgfun, [b, g], args=(self), bounds=x, method="Nelder-Mead")
 
         return self.sample.a, self.sample.b, self.sample.g
 
@@ -290,7 +335,7 @@ class Experiment():
         self.counter += 1
         if self.counter % 50 == 0:
             print(file=sys.stderr)
-        print('.', end='', file=sys.stderr)
+        print(".", end="", file=sys.stderr)
         sys.stderr.flush()
 
     def invert_rt(self, verbose=False):
@@ -409,7 +454,7 @@ class Experiment():
             [float, float]: measured reflection and transmission
         """
         s = self.sample
-        ur1, ut1, uru, _utu = s.rt()
+        ur1, ut1, uru, utu = s.rt()
 
         # find the unscattered reflection and transmission
         nu_inside = iad.cos_snell(1, s.nu_0, s.n)
@@ -419,38 +464,37 @@ class Experiment():
         ur1_actual = ur1 - self.ur1_lost
         ut1_actual = ut1 - self.ut1_lost
         uru_actual = uru - self.uru_lost
+        utu_actual = utu - self.utu_lost
 
         # correct for fraction not collected
         m_r = ur1_actual - (1.0 - self.fraction_of_rc_in_mr) * r_u
         m_t = ut1_actual - (1.0 - self.fraction_of_tc_in_mt) * t_u
 
+        if self.num_spheres == 2:
+            if self.r_sphere is None or self.t_sphere is None:
+                raise ValueError("Double sphere mode requires both reflection and transmission spheres.")
+
+            # Match CWEB/C correction path in iad_calc.c before two-sphere formulas
+            uru_calc = max(uru_actual, 0.0)
+            utu_calc = max(utu_actual, 0.0)
+            ur1_calc = max(ur1 - (1.0 - self.fraction_of_rc_in_mr) * r_u - self.ur1_lost, 0.0)
+            ut1_calc = max(ut1 - (1.0 - self.fraction_of_tc_in_mt) * t_u - self.ut1_lost, 0.0)
+
+            d_spheres = iad.DoubleSphere(self.r_sphere, self.t_sphere)
+            d_spheres.f_r = self.f_r
+            m_r, m_t = d_spheres.measured_rt(ur1_calc, uru_calc, ut1_calc, utu_calc)
+            return m_r, m_t
+
         if self.num_spheres == 1:
+            if self.method in ("comparison", 1):
+                return m_r, m_t
+
             if self.r_sphere is not None:
                 f_u = self.fraction_of_rc_in_mr
-                mr = self.r_sphere.MR(ur1, uru, R_u=r_u, f_u=f_u)
-
-                r_gain_00 = self.r_sphere.gain(0)
-                ratio_std = self.r_sphere.gain(self.r_sphere.r_std) / r_gain_00
-                ratio_sample = self.r_sphere.gain(uru) / r_gain_00
-                print(r_gain_00, ratio_std, ratio_sample)
-
-                p_d = ur1_actual * (1 - f_u) + f_u * self.r_sphere.r_wall
-                p_std = self.r_sphere.r_std * (1 - f_u) + f_u * self.r_sphere.r_wall
-                p_0 = f_u * self.r_sphere.r_wall
-                print("p values", p_d, p_std, p_0)
-                m_r = (p_d - ratio_sample * p_0) / (p_std - ratio_std * p_0)
-                m_r *= self.r_sphere.r_std
-                if ratio_sample != ratio_std:
-                    m_r *= ratio_std / ratio_sample
-
-                print("mr= %6.3f m_r=%6.3f" %(mr, m_r))
+                m_r = self.r_sphere.MR(ur1, uru, R_u=r_u, f_u=f_u, f_w=self.f_r)
 
             if self.t_sphere is not None:
-                mt = self.t_sphere.MT(ut1, uru, Tu=t_u, f_unsc=self.fraction_of_tc_in_mt)
-                t_gain_00 = self.t_sphere.gain(0)
-                t_gain_std = self.t_sphere.gain(uru)
-                m_t = ut1_actual * t_gain_00 / t_gain_std
-                print("mt= %6.3f m_t=%6.3f" %(mt, m_t))
+                m_t = self.t_sphere.MT(ut1, uru, T_u=t_u, f_u=self.fraction_of_tc_in_mt)
 
         return m_r, m_t
 
@@ -504,7 +548,7 @@ def abfun(x, *args):
     exp.sample.b = x[1]
     m_r, m_t = exp.measured_rt()
     delta = np.abs(m_r - exp.m_r) + np.abs(m_t - exp.m_t)
-    print("%7.4f %7.4f %7.4f %7.4f %7.4f" % (exp.sample.a, exp.sample.b, m_r, m_t, delta))
+    #    print("%7.4f %7.4f %7.4f %7.4f %7.4f" % (exp.sample.a, exp.sample.b, m_r, m_t, delta))
     return delta
 
 
@@ -525,5 +569,5 @@ def agfun(x, *args):
     exp.sample.g = x[1]
     m_r, m_t = exp.measured_rt()
     delta = np.abs(m_r - exp.m_r) + np.abs(m_t - exp.m_t)
-#    print("%9.7f %8.5f %8.5f %8.5f %8.5f" % (delta, x[0], x[1], m_r, m_t))
+    #    print("%9.7f %8.5f %8.5f %8.5f %8.5f" % (delta, x[0], x[1], m_r, m_t))
     return delta

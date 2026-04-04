@@ -33,10 +33,11 @@ import scipy.special
 import scipy.optimize
 import numpy as np
 
-__all__ = ('gauss',
-           'radau',
-           'lobatto',
-           )
+__all__ = (
+    "gauss",
+    "radau",
+    "lobatto",
+)
 
 
 def _gauss_func(n, x):
@@ -117,7 +118,7 @@ def radau(n, a=-1, b=1):
 
     pp = scipy.special.legendre(n - 1).deriv(1)
     w[0] = 2 / n**2
-    w[1:] = 1 / pp(x[1:])**2 / (1 - x[1:])
+    w[1:] = 1 / pp(x[1:]) ** 2 / (1 - x[1:])
 
     # scale for desired interval
     x *= 0.5 * (a - b)
@@ -161,7 +162,7 @@ def lobatto(n, a=-1, b=1):
         x[i + 1] = scipy.optimize.brentq(f, brackets[i], brackets[i + 1])
 
     pp = scipy.special.legendre(n - 1)(x)
-    w[1:-1] = w[1:-1] / pp[1:-1]**2
+    w[1:-1] = w[1:-1] / pp[1:-1] ** 2
 
     # scale for desired interval
     x *= 0.5 * (a - b)

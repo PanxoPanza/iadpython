@@ -1,4 +1,4 @@
-# Inverse Adding-Doubling 3-16-2 (24 Apr 2024) 
+# Inverse Adding-Doubling 3-16-3 (18 Jul 2025) 
 # iad basic-B.rxt 
 #                        Beam diameter =     0.1 mm
 #                     Sample thickness =   1.000 mm

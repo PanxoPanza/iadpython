@@ -5,9 +5,9 @@ Example::
     >>> import iadpython as iad
     >>> n=4
     >>> sample = iad.Sample(a=0.9, b=10, g=0.9, n=1.5, quad_pts=4)
-    >>> r, t = sample.rt()
-    >>> print(r)
-    >>> print(t)
+    >>> ur1, ut1, uru, utu = sample.rt()
+    >>> print(ur1)
+    >>> print(ut1)
 """
 
 import copy
@@ -19,6 +19,8 @@ import iadpython.start
 import iadpython.combine
 from scipy.interpolate import CubicSpline as _CubicSpline
 from scipy.integrate import quad as _quad
+
+G_MINUS_ONE_SUBSTITUTE = -0.9999
 
 
 def stringify(form, x):
@@ -45,9 +47,22 @@ def stringify(form, x):
     return s
 
 
-class Sample:
-    """Container class for details of a sample.
+def sanitize_anisotropy(g):
+    """Map singular anisotropy endpoint g=-1 to a nearby finite value."""
+    if g is None:
+        return None
 
+    if np.isscalar(g):
+        if np.isclose(g, -1.0):
+            return G_MINUS_ONE_SUBSTITUTE
+        return g
+
+    arr = np.asarray(g)
+    return np.where(np.isclose(arr, -1.0), G_MINUS_ONE_SUBSTITUTE, arr)
+
+
+class Sample:
+    """
     Most things can be changed after creation by assigning to an element.
 
     The angle of incidence is assumed to be perpendicular to the
@@ -101,7 +116,7 @@ class Sample:
         """
         self.a = a
         self.b = b
-        self._g = g
+        self._g = sanitize_anisotropy(g)
         self.d = d  # thickness of sample in mm
         self._n = n
         self.n_above = n_above
@@ -162,6 +177,7 @@ class Sample:
     @g.setter
     def g(self, value):
         """When anisotropy is changed phi is invalid."""
+        value = sanitize_anisotropy(value)
         if np.isscalar(value) and np.isscalar(self._g) and value == self._g:
             return
 
@@ -227,12 +243,13 @@ class Sample:
     def a_delta_M(self):
         """Reduced albedo in delta-M approximation."""
         af = self.a * (self.g**self.quad_pts)
-        return (self.a - af) / (1 - af)
-
-    def b_delta_M(self):
-        """Reduced thickness in delta-M approximation."""
-        af = self.a * (self.g**self.quad_pts)
-        return (1 - af) * self.b
+        num = np.asarray(self.a - af, dtype=float)
+        den = np.asarray(1 - af, dtype=float)
+        out = np.zeros_like(num, dtype=float)
+        np.divide(num, den, out=out, where=~np.isclose(den, 0.0))
+        if out.ndim == 0:
+            return float(out)
+        return out
 
     def as_array(self):
         """Return details as an array."""
@@ -440,13 +457,7 @@ class Sample:
         R12, T12 = iadpython.simple_layer_matrices(self)
 
         # all done if boundaries are not an issue
-        if (
-            self.n == 1
-            and self.n_above == 1
-            and self.n_below == 1
-            and self.b_above == 0
-            and self.b_below == 0
-        ):
+        if self.n == 1 and self.n_above == 1 and self.n_below == 1 and self.b_above == 0 and self.b_below == 0:
             return R12, R12, T12, T12
 
         # reflection/transmission arrays for top boundary
@@ -460,13 +471,9 @@ class Sample:
         # reflection/transmission arrays for bottom boundary
         R23, R32, T23, T32 = iadpython.start.boundary_layer(self, top=False)
 
-        # different boundaries on top and bottom
-        R02, R20, T02, T20 = iadpython.add_slide_above(
-            self, R01, R10, T01, T10, R12, R12, T12, T12
-        )
-        R03, R30, T03, T30 = iadpython.add_slide_below(
-            self, R02, R20, T02, T20, R23, R32, T23, T32
-        )
+       # different boundaries on top and bottom
+        R02, R20, T02, T20 = iadpython.add_slide_above(self, R01, R10, T01, T10, R12, R12, T12, T12)
+        R03, R30, T03, T30 = iadpython.add_slide_below(self, R02, R20, T02, T20, R23, R32, T23, T32)
 
         return R03, R30, T03, T30
 
@@ -584,7 +591,7 @@ class Sample:
         return ur1, ut1, uru, utu
 
     def unscattered_scalar_rt(self):
-        """Find unscattered r and t."""
+        """Find unscattered r and t for diagonal matrices (scalar of array version)."""
         n_top = self.n_above
         n_slab = self.n
         n_bot = self.n_below
