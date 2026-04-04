@@ -251,6 +251,11 @@ class Sample:
             return float(out)
         return out
 
+    def b_delta_M(self):
+        """Reduced optical thickness in delta-M approximation."""
+        af = self.a * (self.g**self.quad_pts)
+        return self.b * (1 - af)
+
     def as_array(self):
         """Return details as an array."""
         return [self.a, self.b, self.g, self.d, self.n]
