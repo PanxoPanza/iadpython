@@ -393,12 +393,15 @@ class Experiment:
         """Find optical thickness using unscattered transmission."""
         s = self.sample
         t_u = self.m_u or 0
+        n_boundary = getattr(s, "n_sample_boundary", s.n)
+        n_outer_above = getattr(s, "n_outer_above", 1.0)
+        n_outer_below = getattr(s, "n_outer_below", 1.0)
 
-        r1, t1 = iad.absorbing_glass_RT(1.0, s.n_above, s.n, s.nu_0, s.b_above)
+        r1, t1 = iad.absorbing_glass_RT(n_outer_above, s.n_above, n_boundary, s.nu_0, s.b_above)
 
-        mu = iad.cos_snell(1.0, s.nu_0, s.n)
+        mu = iad.cos_snell(iad.fresnel._transport_index(n_outer_above), s.nu_0, s.n)
 
-        r2, t2 = iad.absorbing_glass_RT(s.n, s.n_below, 1.0, mu, s.b_below)
+        r2, t2 = iad.absorbing_glass_RT(n_boundary, s.n_below, n_outer_below, mu, s.b_below)
 
         if t_u <= 0:
             return np.inf
@@ -457,8 +460,16 @@ class Experiment:
         ur1, ut1, uru, utu = s.rt()
 
         # find the unscattered reflection and transmission
-        nu_inside = iad.cos_snell(1, s.nu_0, s.n)
-        r_u, t_u = iad.specular_rt(s.n_above, s.n, s.n_below, s.b, nu_inside)
+        r_u, t_u = iad.specular_rt(
+            s.n_above,
+            getattr(s, "n_sample_boundary", s.n),
+            s.n_below,
+            s.b,
+            s.nu_0,
+            n_outer_top=getattr(s, "n_outer_above", 1.0),
+            n_outer_bot=getattr(s, "n_outer_below", 1.0),
+            n_slab_transport=s.n,
+        )
 
         # correct for lost light
         ur1_actual = ur1 - self.ur1_lost

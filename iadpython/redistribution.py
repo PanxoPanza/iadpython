@@ -81,8 +81,15 @@ def legendre_coeffs_from_df(
     # Vectorized integration: compute all moments for all spectra at once
     a_raw = P_all @ (vals_all * g_w[:, None])  # (n_mom, nquad) @ (nquad, nλ) = (n_mom, nλ)
     
-    # Normalize so a_0 = 1 for each spectrum
-    a_raw /= a_raw[0, :]
+    # Normalize so a_0 = 1 for each spectrum.  When the supplied phase
+    # function is identically zero (matched-index / no-scattering limits),
+    # leave all moments at zero instead of creating NaNs.
+    a0 = a_raw[0, :]
+    zero_mask = np.isclose(a0, 0.0)
+    if np.any(~zero_mask):
+        a_raw[:, ~zero_mask] /= a0[~zero_mask]
+    if np.any(zero_mask):
+        a_raw[:, zero_mask] = 0.0
 
     return a_raw
 

@@ -165,7 +165,7 @@ def thinnest_layer(sample):
     return diamond(sample)
 
 
-def _boundary(sample, n_i, n_g, n_t, b):
+def _boundary(sample, n_i, n_g, n_t, b, nu_i):
     """Find matrix for R and T for air/glass/slab interface.
 
     The resulting matrix is a diagonal matrix that is represented as an
@@ -179,12 +179,7 @@ def _boundary(sample, n_i, n_g, n_t, b):
     don't work.  So punted and took all that code out.
 
     """
-    if n_i == 1.0:
-        nu = iad.cos_snell(n_t, sample.nu, n_i)
-    else:
-        nu = sample.nu
-
-    r, t = iad.absorbing_glass_RT(n_i, n_g, n_t, nu, b)
+    r, t = iad.absorbing_glass_RT(n_i, n_g, n_t, nu_i, b)
     r *= sample.twonuw
     return r, t
 
@@ -212,12 +207,17 @@ def boundary_layer(s, top=True):
     if s.nu is None:
         s.update_quadrature()
 
+    n_slab_transport = s.n
+    n_slab_boundary = getattr(s, "n_sample_boundary", s.n)
+
     if top:
-        R01, T01 = _boundary(s, 1.0, s.n_above, s.n, s.b_above)
-        R10, T10 = _boundary(s, s.n, s.n_above, 1.0, s.b_above)
+        nu_01 = iad.cos_snell(n_slab_transport, s.nu, iad.fresnel._transport_index(s.n_outer_above))
+        R01, T01 = _boundary(s, s.n_outer_above, s.n_above, n_slab_boundary, s.b_above, nu_01)
+        R10, T10 = _boundary(s, n_slab_boundary, s.n_above, s.n_outer_above, s.b_above, s.nu)
     else:
-        R10, T10 = _boundary(s, 1.0, s.n_below, s.n, s.b_below)
-        R01, T01 = _boundary(s, s.n, s.n_below, 1.0, s.b_below)
+        nu_23 = iad.cos_snell(n_slab_transport, s.nu, iad.fresnel._transport_index(s.n_outer_below))
+        R10, T10 = _boundary(s, s.n_outer_below, s.n_below, n_slab_boundary, s.b_below, nu_23)
+        R01, T01 = _boundary(s, n_slab_boundary, s.n_below, s.n_outer_below, s.b_below, s.nu)
     return R01, R10, T01, T10
 
 
@@ -275,8 +275,31 @@ def unscattered_rt(s):
     r01, t01 = iad.zero_layer(s)
     r10, t10 = iad.zero_layer(s)
 
-    r01, t01 = iad.specular_rt(s.n_above, s.n, s.n_below, s.b, s.nu, s.b_above, s.b_below)
-    r10, t10 = iad.specular_rt(s.n_below, s.n, s.n_above, s.b, s.nu, s.b_below, s.b_above)
+    nu_out = iad.cos_snell(s.n, s.nu, iad.fresnel._transport_index(s.n_outer_above))
+    r01, t01 = iad.specular_rt(
+        s.n_above,
+        getattr(s, "n_sample_boundary", s.n),
+        s.n_below,
+        s.b,
+        nu_out,
+        s.b_above,
+        s.b_below,
+        n_outer_top=s.n_outer_above,
+        n_outer_bot=s.n_outer_below,
+        n_slab_transport=s.n,
+    )
+    r10, t10 = iad.specular_rt(
+        s.n_below,
+        getattr(s, "n_sample_boundary", s.n),
+        s.n_above,
+        s.b,
+        iad.cos_snell(s.n, s.nu, iad.fresnel._transport_index(s.n_outer_below)),
+        s.b_below,
+        s.b_above,
+        n_outer_top=s.n_outer_below,
+        n_outer_bot=s.n_outer_above,
+        n_slab_transport=s.n,
+    )
 
     rr01 = np.diagflat(r01) / s.twonuw
     rr10 = np.diagflat(r10) / s.twonuw
@@ -319,14 +342,35 @@ def unscattered(s):
     utu = 0
 
     for i in range(n):
-        nu_outside = iad.cos_snell(s.n, s.nu[i], 1.0)
+        nu_outside = iad.cos_snell(s.n, s.nu[i], iad.fresnel._transport_index(s.n_outer_above))
         if nu_outside > 0:
-            r, t = iad.specular_rt(s.n_above, s.n, s.n_below,
-                                   s.b, nu_outside, s.b_above, s.b_below)
+            r, t = iad.specular_rt(
+                s.n_above,
+                getattr(s, "n_sample_boundary", s.n),
+                s.n_below,
+                s.b,
+                nu_outside,
+                s.b_above,
+                s.b_below,
+                n_outer_top=s.n_outer_above,
+                n_outer_bot=s.n_outer_below,
+                n_slab_transport=s.n,
+            )
             uru += s.twonuw[i] * r[i, i]
             utu += s.twonuw[i] * t[i, i]
 
-    ur1, ut1 = iad.specular_rt(s.n_above, s.n, s.n_below, s.b, s.nu_0, s.b_above, s.b_below)
+    ur1, ut1 = iad.specular_rt(
+        s.n_above,
+        getattr(s, "n_sample_boundary", s.n),
+        s.n_below,
+        s.b,
+        s.nu_0,
+        s.b_above,
+        s.b_below,
+        n_outer_top=s.n_outer_above,
+        n_outer_bot=s.n_outer_below,
+        n_slab_transport=s.n,
+    )
 
     uru *= s.n**2
     utu *= s.n**2

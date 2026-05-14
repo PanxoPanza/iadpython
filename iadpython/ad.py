@@ -21,6 +21,8 @@ from scipy.interpolate import CubicSpline as _CubicSpline
 from scipy.integrate import quad as _quad
 
 G_MINUS_ONE_SUBSTITUTE = -0.9999
+_OUTER_INTERFACE_GL_ORDER = 64
+_OUTER_INTERFACE_GL_X, _OUTER_INTERFACE_GL_W = np.polynomial.legendre.leggauss(_OUTER_INTERFACE_GL_ORDER)
 
 
 def stringify(form, x):
@@ -59,6 +61,11 @@ def sanitize_anisotropy(g):
 
     arr = np.asarray(g)
     return np.where(np.isclose(arr, -1.0), G_MINUS_ONE_SUBSTITUTE, arr)
+
+def _indices_match(a, b, *, tol=1e-12):
+    """Compare refractive indices with a small complex tolerance."""
+    return bool(np.isclose(np.real(a), np.real(b), atol=tol, rtol=0.0) and
+                np.isclose(np.imag(a), np.imag(b), atol=tol, rtol=0.0))
 
 
 class Sample:
@@ -101,6 +108,9 @@ class Sample:
         n=1,
         n_above=1,
         n_below=1,
+        n_outer_above=1,
+        n_outer_below=1,
+        n_sample_boundary=None,
         quad_pts=4,
         pf_type="HG",
         pf_data=None,
@@ -121,6 +131,9 @@ class Sample:
         self._n = n
         self.n_above = n_above
         self.n_below = n_below
+        self.n_outer_above = n_outer_above
+        self.n_outer_below = n_outer_below
+        self.n_sample_boundary = n if n_sample_boundary is None else n_sample_boundary
         self.d_above = 1  # thickness of top slide in mm
         self.d_below = 1  # thickness of bot slide in mm
         self._nu_0 = 1.0
@@ -146,7 +159,6 @@ class Sample:
     @n.setter
     def n(self, value):
         """When index is changed quadrature becomes invalid."""
-        print(value)
         if value != self._n:
             self.nu = None
             self.twonuw = None
@@ -167,7 +179,7 @@ class Sample:
             self.twonuw = None
             self.hp = None
             self.hm = None
-            self._n = value
+            self._nu_0 = value
 
     @property
     def g(self):
@@ -236,9 +248,88 @@ class Sample:
             return self.a * (1 - self.g)
         return (1 - self.g) * self.a * self.b / self.d
 
+    def _exit_index(self, *, top):
+        """Effective real index that limits escape on one side."""
+        slide = self.n_above if top else self.n_below
+        outer = self.n_outer_above if top else self.n_outer_below
+        b_slide = self.b_above if top else self.b_below
+
+        if (iadpython.fresnel._is_complex_value(self.n_sample_boundary) or
+                iadpython.fresnel._is_complex_value(slide) or
+                iadpython.fresnel._is_complex_value(outer)):
+            return None
+
+        slide_real = iadpython.fresnel._transport_index(slide)
+        outer_real = iadpython.fresnel._transport_index(outer)
+
+        # A slide index of 1.0 with zero optical thickness represents "no slide".
+        if np.isclose(b_slide, 0.0) and np.isclose(slide_real, 1.0):
+            return outer_real
+
+        return min(slide_real, outer_real)
+
+    def nu_c_above(self):
+        """Cosine of the escape critical angle on the top side."""
+        n_exit = self._exit_index(top=True)
+        if n_exit is None:
+            return 0.0
+        return iadpython.fresnel.cos_critical(self.n, n_exit)
+
+    def nu_c_below(self):
+        """Cosine of the escape critical angle on the bottom side."""
+        n_exit = self._exit_index(top=False)
+        if n_exit is None:
+            return 0.0
+        return iadpython.fresnel.cos_critical(self.n, n_exit)
+
+    def _slice_start(self, nu_c):
+        """Index of the first quadrature angle that can escape."""
+        idx = np.where(self.nu > nu_c)[0]
+        if idx.size == 0:
+            return len(self.nu) - 1
+        return int(idx[0])
+
+    def _collapse_to_outer_interface(self):
+        """True when a zero-thickness sample reduces to one direct interface."""
+        return (
+            np.isclose(self.d, 0.0)
+            and np.isclose(self.b_above, 0.0)
+            and np.isclose(self.b_below, 0.0)
+            and _indices_match(self.n_above, 1.0)
+            and _indices_match(self.n_below, 1.0)
+        )
+
+    def _outer_interface_rt(self, nu):
+        """Direct outer-medium interface RT for the collapsed zero-thickness case."""
+        return iadpython.fresnel.interface_rt(self.n_outer_above, nu, self.n_outer_below)
+
+    def _outer_interface_average_rt(self, nu_min=0.0, nu_max=1.0, *, weighted):
+        """Average direct-interface RT over an angular interval."""
+        nu_min = max(float(nu_min), 0.0)
+        nu_max = min(float(nu_max), 1.0)
+        if nu_max <= nu_min:
+            return 0.0, 0.0
+
+        jac = 0.5 * (nu_max - nu_min)
+        nu = jac * _OUTER_INTERFACE_GL_X + 0.5 * (nu_max + nu_min)
+        r, t = self._outer_interface_rt(nu)
+        if weighted:
+            denom = nu_max**2 - nu_min**2
+            r_avg = jac * np.dot(_OUTER_INTERFACE_GL_W, 2.0 * nu * r) / denom
+            t_avg = jac * np.dot(_OUTER_INTERFACE_GL_W, 2.0 * nu * t) / denom
+        else:
+            r_avg = 0.5 * np.dot(_OUTER_INTERFACE_GL_W, r)
+            t_avg = 0.5 * np.dot(_OUTER_INTERFACE_GL_W, t)
+        ur = float(np.real(r_avg))
+        ut = float(np.real(t_avg))
+        return float(ur), float(ut)
+
     def nu_c(self):
-        """Cosine of critical angle in the sample."""
-        return iadpython.fresnel.cos_critical(self.n, 1)
+        """Smallest positive escape critical-angle cosine across both boundaries."""
+        criticals = [nu_c for nu_c in (self.nu_c_above(), self.nu_c_below()) if nu_c > 0]
+        if not criticals:
+            return 0.0
+        return min(criticals)
 
     def a_delta_M(self):
         """Reduced albedo in delta-M approximation."""
@@ -277,9 +368,11 @@ class Sample:
         s += "   thickness           = %s mm\n" % stringify("%.3f", self.d)
         s += "   sample index        = %s\n" % stringify("%.3f", self.n)
         s += "   top slide index     = %s\n" % stringify("%.3f", self.n_above)
+        s += "   top outer index     = %s\n" % stringify("%.3f", self.n_outer_above)
         if self.b_above != 0:
             s += "   top slide OD        = %s\n" % stringify("%.3f", self.b_above)
         s += "   bottom slide index  = %s\n" % stringify("%.3f", self.n_below)
+        s += "   bottom outer index  = %s\n" % stringify("%.3f", self.n_outer_below)
         if self.b_below != 0:
             s += "   bottom slide OD     = %s\n" % stringify("%.3f", self.b_below)
         s += "   cos(theta incident) = %s\n" % stringify("%.3f", self.nu_0)
@@ -326,7 +419,7 @@ class Sample:
 
         # identify index of first quadrature angle greater than the critical angle
         nu_c = self.nu_c()
-        k = np.min(np.where(self.nu > nu_c))
+        k = self._slice_start(nu_c)
         UXx = np.dot(self.twonuw[k:], a[k:, k:])
         tflux = np.dot(self.twonuw[k:], UXx) * self.n**2
 
@@ -399,29 +492,33 @@ class Sample:
 
         if self.nu_0 == 1:
             # case 1.  Normal incidence, no critical angle
-            if self._n == 1:
+            nu_c = self.nu_c()
+            if self._n == 1 or nu_c <= 0:
                 a1 = []
                 w1 = []
                 a2, w2 = iadpython.quadrature.radau(self.quad_pts, a=0, b=1)
 
             # case 2.  Normal incidence, with critical angle
             else:
-                nu_c = self.nu_c()
                 a1, w1 = iadpython.quadrature.gauss(nby2, a=0, b=nu_c)
                 a2, w2 = iadpython.quadrature.radau(nby2, a=nu_c, b=1)
         else:
             # case 3.  Conical incidence.  Include nu_0
-            if self._n == 1.0:
+            nu_c = self.nu_c()
+            if self._n == 1.0 or nu_c <= 0:
                 a1, w1 = iadpython.quadrature.radau(nby2, a=0, b=self.nu_0)
                 a2, w2 = iadpython.quadrature.radau(nby2, a=self.nu_0, b=1)
 
             # case 4.  Conical incidence.  Include nu_c, nu_00, and 1
             else:
                 nby3 = int(self.quad_pts / 3)
-                nu_c = self.nu_c()
 
                 # cosine of nu_0 in sample
-                nu_00 = iadpython.fresnel.cos_snell(1.0, self.nu_0, self.n)
+                nu_00 = iadpython.fresnel.cos_snell(
+                    iadpython.fresnel._transport_index(self.n_outer_above),
+                    self.nu_0,
+                    self.n,
+                )
                 a00, w00 = iadpython.quadrature.gauss(nby3, a=0, b=nu_c)
                 a01, w01 = iadpython.quadrature.radau(nby3, a=nu_c, b=nu_00)
                 a1 = np.append(a00, a01)
@@ -462,14 +559,19 @@ class Sample:
         R12, T12 = iadpython.simple_layer_matrices(self)
 
         # all done if boundaries are not an issue
-        if self.n == 1 and self.n_above == 1 and self.n_below == 1 and self.b_above == 0 and self.b_below == 0:
+        if (_indices_match(self.n_sample_boundary, self.n_outer_above) and
+                _indices_match(self.n_sample_boundary, self.n_outer_below) and
+                np.isclose(self.b_above, 0.0) and np.isclose(self.b_below, 0.0) and
+                np.isclose(self.n_above, 1.0) and np.isclose(self.n_below, 1.0)):
             return R12, R12, T12, T12
 
         # reflection/transmission arrays for top boundary
         R01, R10, T01, T10 = iadpython.start.boundary_layer(self, top=True)
 
         # same slide above and below.
-        if self.n_above == self.n_below and self.b_above == self.b_below:
+        if (self.n_above == self.n_below and
+                self.b_above == self.b_below and
+                self.n_outer_above == self.n_outer_below):
             R03, T03 = iadpython.add_same_slides(self, R01, R10, T01, T10, R12, T12)
             return R03, R03, T03, T03
 
@@ -490,13 +592,17 @@ class Sample:
         fluxes because they are zero.  However, the internal reflected fluxes will
         not be zero and should be excluded from the sums.
         """
-        nu_c = self.nu_c()
-        # identify index of first quadrature angle greater than the critical angle
-        k = np.min(np.where(self.nu > nu_c))
-        URx = np.dot(self.twonuw[k:], R[k:, k:])       # Reflectance collimated incident flux
-        UTx = np.dot(self.twonuw[k:], T[k:, k:])       # Transmittance collimated incident flux
-        URU = np.dot(self.twonuw[k:], URx) * self.n**2 # Reflected diffuse (Lambertian) flux
-        UTU = np.dot(self.twonuw[k:], UTx) * self.n**2 # Transmitted diffuse (Lambertian) flux
+        if self._collapse_to_outer_interface():
+            ur1, ut1 = self._outer_interface_rt(self.nu_0)
+            uru, utu = self._outer_interface_average_rt(weighted=True)
+            return float(ur1), float(ut1), uru, utu
+
+        k_r = self._slice_start(self.nu_c_above())
+        k_t = self._slice_start(self.nu_c_below())
+        URx = np.dot(self.twonuw[k_r:], R[k_r:, k_r:])       # Reflectance collimated incident flux
+        UTx = np.dot(self.twonuw[k_t:], T[k_t:, k_t:])       # Transmittance collimated incident flux
+        URU = np.dot(self.twonuw[k_r:], URx) * self.n**2     # Reflected diffuse (Lambertian) flux
+        UTU = np.dot(self.twonuw[k_t:], UTx) * self.n**2     # Transmitted diffuse (Lambertian) flux
 
         return URx[-1], UTx[-1], URU, UTU
 
@@ -513,21 +619,27 @@ class Sample:
         Returns:
             reflected and transmitted fluxes over the cone
         """
-        nu_c = self.nu_c()
-        nu_min = max(nu_min, nu_c)
+        if self._collapse_to_outer_interface():
+            return self._outer_interface_average_rt(nu_min, nu_max, weighted=False)
+
+        nu_c_r = self.nu_c_above()
+        nu_c_t = self.nu_c_below()
+        nu_min = max(nu_min, nu_c_r)
         
-        # identify index of first quadrature angle greater than the critical angle
-        k = np.min(np.where(self.nu > nu_c))
-        URx = np.dot(self.twonuw[k:], R[k:, k:])
-        UTx = np.dot(self.twonuw[k:], T[k:, k:])
+        k_r = self._slice_start(nu_c_r)
+        k_t = self._slice_start(nu_c_t)
+        URx = np.dot(self.twonuw[k_r:], R[k_r:, k_r:])
+        UTx = np.dot(self.twonuw[k_t:], T[k_t:, k_t:])
         
         # creaate interpolation functions for integration
-        UR_nu = _CubicSpline(self.nu[k:], URx)
-        UT_nu = _CubicSpline(self.nu[k:], UTx)
+        UR_nu = _CubicSpline(self.nu[k_r:], URx)
+        UT_nu = _CubicSpline(self.nu[k_t:], UTx)
 
         # Get average reflectance and transmittance over the cone
+        if nu_max <= nu_min:
+            return 0.0, 0.0
         UR_cone = _quad(UR_nu, nu_min, nu_max)[0] / (nu_max - nu_min)
-        UT_cone = _quad(UT_nu, nu_min, nu_max)[0]  / (nu_max - nu_min)
+        UT_cone = _quad(UT_nu, max(nu_min, nu_c_t), nu_max)[0] / (nu_max - nu_min)
         return UR_cone, UT_cone
     
     def rt(self):
@@ -597,12 +709,24 @@ class Sample:
 
     def unscattered_scalar_rt(self):
         """Find unscattered r and t for diagonal matrices (scalar of array version)."""
+        if self._collapse_to_outer_interface():
+            r, t = self._outer_interface_rt(self.nu_0)
+            return float(r), float(t)
+
         n_top = self.n_above
-        n_slab = self.n
+        n_slab = self.n_sample_boundary
         n_bot = self.n_below
         b_slab = self.b
-        nu_in = iadpython.fresnel.cos_snell(1, self.nu_0, n_slab)
-        return iadpython.fresnel.specular_rt(n_top, n_slab, n_bot, b_slab, nu_in)
+        return iadpython.fresnel.specular_rt(
+            n_top,
+            n_slab,
+            n_bot,
+            b_slab,
+            self.nu_0,
+            n_outer_top=self.n_outer_above,
+            n_outer_bot=self.n_outer_below,
+            n_slab_transport=self.n,
+        )
 
     def unscattered_rt(self):
         """Find unscattered r and t."""
