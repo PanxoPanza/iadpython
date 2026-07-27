@@ -68,6 +68,50 @@ and installing a C library.
 
 See <https://iadpython.readthedocs.io> for full documentation of `iadpython`.
 
+Differences from upstream iadpython (this fork)
+-----------------------------------------------
+
+This fork adds first-class multilayer support and **changes how arrays are
+interpreted** relative to upstream.  If you are migrating code, read this
+section.
+
+**Layer API.**  A multilayer sample is built from explicit ``Layer`` objects;
+each layer may have its own refractive index (large index mismatches between
+layers are handled exactly, including total internal reflection), its own
+Henyey-Greenstein anisotropy *or* tabulated phase function, and its own
+wavelength dependence::
+
+    import numpy as np
+    import iadpython as iad
+
+    l0 = iad.Layer(a=0.95, b=0.84, g=0.20, n=1.35, d=0.10)
+    l1 = iad.Layer(a=0.81, b=0.31, g=0.85, n=2.00, d=0.05)
+    l2 = iad.Layer(a=0.90, b=1.00, n=1.45, pf_type='TABULATED', pf_data=df)
+
+    s = iad.Sample(layers=[l0, l1, l2], n_above=1.5, quad_pts=16)
+    ur1, ut1, uru, utu = s.rt()
+
+**Axis rule.**  The two axes of a simulation are now structurally distinct
+and cannot be confused:
+
+* *layer axis* = position in the ``layers`` list;
+* *wavelength axis* = arrays **inside** each attribute (``a``/``b``/``g``/``n``
+  of a ``Layer`` may each be a scalar or a wavelength array; a ``TABULATED``
+  phase function holds one ``pf_data`` column per wavelength).  Scalar-valued
+  layers are automatically held constant across the sweep.
+
+**Breaking change.**  Upstream allowed ``sample.a = np.array([...])`` followed
+by ``rt_matrices()`` to mean *layers* while the same array passed to ``rt()``
+meant *wavelengths*.  That ambiguity is removed: flat arrays on ``a``/``b``/``g``
+now **always mean wavelengths**, and array-valued ``n`` on a flat sample is an
+error.  Code using the old flat-arrays-as-layers form fails with::
+
+    RuntimeError: array-valued a/b/g now mean wavelengths, not layers; build a
+    multilayer sample with iadpython.Sample(layers=[iadpython.Layer(...), ...])
+
+Classic single-layer usage (scalars, or wavelength arrays with ``rt()``) is
+unchanged, as are all inverse-calculation entry points.
+
 Usage
 -----
 

@@ -1,9 +1,11 @@
 # pylint: disable=invalid-name
 
 """
-Tests for multi-layer samples.
+Tests for multi-layer samples built with the Layer API.
 
-These tests are incomplete.
+Multilayer structure is declared as ``Sample(layers=[Layer(...), ...])``;
+the old form (flat arrays on a/b/g meaning layers) was removed in this fork.
+The expected numerical values below are unchanged from the original tests.
 """
 
 import unittest
@@ -16,44 +18,54 @@ class LayeredSample(unittest.TestCase):
 
     def test_00_layers(self):
         """Two identical non-scattering layers without boundaries."""
-        s = iadpython.Sample(quad_pts=4)
-        s.a = np.array([0.0, 0.0])
-        s.b = np.array([0.5, 0.5])
-        s.g = np.array([0.0, 0.0])
-        rr, tt = iadpython.simple_layer_matrices(s)
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.0, b=0.5, g=0.0),
+                iadpython.Layer(a=0.0, b=0.5, g=0.0),
+            ],
+            quad_pts=4,
+        )
+        rr, _, tt, _ = s.rt_matrices()
 
-        s.a = 0.0
-        s.b = 1.0
-        s.g = 0.0
-        R, T = iadpython.simple_layer_matrices(s)
+        single = iadpython.Sample(a=0.0, b=1.0, g=0.0, quad_pts=4)
+        R, _, T, _ = single.rt_matrices()
 
         np.testing.assert_allclose(R, rr, atol=1e-5)
         np.testing.assert_allclose(T, tt, atol=1e-5)
 
     def test_01_layers(self):
         """Three identical non-scattering layers with boundaries."""
-        s = iadpython.Sample(n=1.4, n_above=1.5, n_below=1.5, quad_pts=16)
-        s.a = np.array([0.0, 0.0, 0.0])
-        s.b = np.array([0.5, 0.2, 0.3])
-        s.g = np.array([0.9, 0.9, 0.9])
-
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.0, b=0.5, g=0.9, n=1.4),
+                iadpython.Layer(a=0.0, b=0.2, g=0.9, n=1.4),
+                iadpython.Layer(a=0.0, b=0.3, g=0.9, n=1.4),
+            ],
+            n_above=1.5,
+            n_below=1.5,
+            quad_pts=16,
+        )
         rr, _, tt, _ = s.rt_matrices()
-        s.a = 0.0
-        s.b = 1.0
-        s.g = 0.0
-        R, _, T, _ = s.rt_matrices()
+
+        single = iadpython.Sample(
+            a=0.0, b=1.0, g=0.0, n=1.4, n_above=1.5, n_below=1.5, quad_pts=16
+        )
+        R, _, T, _ = single.rt_matrices()
 
         np.testing.assert_allclose(R, rr, atol=1e-4)
         np.testing.assert_allclose(T, tt, atol=1e-4)
 
     def test_02_layers(self):
         """Two identical isotropic scattering layers without boundaries."""
-        s = iadpython.Sample(quad_pts=4)
-        s.a = np.array([0.5, 0.5])
-        s.b = np.array([0.5, 0.5])
-        s.g = np.array([0, 0])
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.5, b=0.5, g=0.0),
+                iadpython.Layer(a=0.5, b=0.5, g=0.0),
+            ],
+            quad_pts=4,
+        )
+        rr, _, tt, _ = s.rt_matrices()
 
-        rr, tt = iadpython.simple_layer_matrices(s)
         R = np.array(
             [
                 [0.80010, 0.31085, 0.18343, 0.14931],
@@ -77,12 +89,16 @@ class LayeredSample(unittest.TestCase):
 
     def test_03_layers(self):
         """Three identical isotropic scattering layers without boundaries."""
-        s = iadpython.Sample(quad_pts=4)
-        s.a = np.array([0.5, 0.5, 0.5])
-        s.b = np.array([0.5, 0.2, 0.3])
-        s.g = np.array([0.0, 0.0, 0.0])
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.5, b=0.5, g=0.0),
+                iadpython.Layer(a=0.5, b=0.2, g=0.0),
+                iadpython.Layer(a=0.5, b=0.3, g=0.0),
+            ],
+            quad_pts=4,
+        )
+        rr, _, tt, _ = s.rt_matrices()
 
-        rr, tt = iadpython.simple_layer_matrices(s)
         R = np.array(
             [
                 [0.80010, 0.31085, 0.18343, 0.14931],
@@ -106,32 +122,40 @@ class LayeredSample(unittest.TestCase):
 
     def test_04_layers(self):
         """Three identical layers without boundaries."""
-        s = iadpython.Sample(quad_pts=16)
-        s.a = np.array([0.5, 0.5, 0.5])
-        s.b = np.array([0.5, 0.2, 0.3])
-        s.g = np.array([0.9, 0.9, 0.9])
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.5, b=0.5, g=0.9),
+                iadpython.Layer(a=0.5, b=0.2, g=0.9),
+                iadpython.Layer(a=0.5, b=0.3, g=0.9),
+            ],
+            quad_pts=16,
+        )
+        rr, _, tt, _ = s.rt_matrices()
 
-        rr, tt = iadpython.simple_layer_matrices(s)
-        s.a = 0.5
-        s.b = 1
-        s.g = 0.9
-        R, T = iadpython.simple_layer_matrices(s)
+        single = iadpython.Sample(a=0.5, b=1.0, g=0.9, quad_pts=16)
+        R, _, T, _ = single.rt_matrices()
 
         np.testing.assert_allclose(R, rr, atol=1e-5)
         np.testing.assert_allclose(T, tt, atol=1e-5)
 
     def test_05_layers(self):
         """Three identical layers with boundaries."""
-        s = iadpython.Sample(n=1.4, n_above=1.5, n_below=1.5, quad_pts=16)
-        s.a = np.array([0.5, 0.5, 0.5])
-        s.b = np.array([0.5, 0.2, 0.3])
-        s.g = np.array([0.9, 0.9, 0.9])
-
+        s = iadpython.Sample(
+            layers=[
+                iadpython.Layer(a=0.5, b=0.5, g=0.9, n=1.4),
+                iadpython.Layer(a=0.5, b=0.2, g=0.9, n=1.4),
+                iadpython.Layer(a=0.5, b=0.3, g=0.9, n=1.4),
+            ],
+            n_above=1.5,
+            n_below=1.5,
+            quad_pts=16,
+        )
         rr, _, tt, _ = s.rt_matrices()
-        s.a = 0.5
-        s.b = 1
-        s.g = 0.9
-        R, _, T, _ = s.rt_matrices()
+
+        single = iadpython.Sample(
+            a=0.5, b=1.0, g=0.9, n=1.4, n_above=1.5, n_below=1.5, quad_pts=16
+        )
+        R, _, T, _ = single.rt_matrices()
 
         np.testing.assert_allclose(R, rr, atol=6e-5)
         np.testing.assert_allclose(T, tt, atol=6e-5)

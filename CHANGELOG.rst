@@ -1,6 +1,26 @@
 Changelog for `iadpython` package
 =================================
 
+0.8.0 (unreleased, fork)
+------------------------
+* add ``Layer`` class and ``Sample(layers=[...])`` API for explicit multilayer
+  structure; each layer carries its own a, b, g, n, d, and phase function
+* support refractive-index mismatched layers exactly (Snell-invariant master
+  grid with per-channel total internal reflection at internal interfaces)
+* support per-layer phase functions, mixing Henyey-Greenstein and TABULATED
+  layers freely within one stack
+* support wavelength-dependent layer properties (arrays inside Layer
+  attributes; one ``pf_data`` column per wavelength); scalar layers broadcast
+  across the sweep
+* exact analytic unscattered (ballistic) reflection/transmission for
+  multilayer stacks, including mismatched indices and absorbing slides
+* BREAKING: flat arrays on ``a``/``b``/``g`` now always mean wavelengths;
+  the old form where arrays passed to ``rt_matrices()`` meant layers was
+  removed (use ``Sample(layers=...)``); array-valued ``n`` on a flat sample
+  now raises
+* make ``mu_a()``/``mu_s()``/``mu_sp()`` and zero-thickness collapse handling
+  array-safe
+
 0.7.0
 -----
 * align build, packaging, CI, and docs infrastructure with miepython patterns

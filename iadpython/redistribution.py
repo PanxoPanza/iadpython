@@ -32,6 +32,54 @@ __all__ = ('hg_elliptic',
            'phase_legendre',
            'legendre_coeffs_from_df')
 
+
+def _prepare_moments(pf_data, n_needed):
+    """Validate and normalize a ``pf_type='MOMENTS'`` array.
+
+    Shared by ``phase_legendre`` and ``Sample._deltaM_forward_fraction`` so
+    both consumers of a supplied moments array agree on the same validation
+    and normalization convention -- rather than each re-deriving it and
+    risking drift.
+
+    Parameters
+    ----------
+    pf_data  : array-like, Legendre moments a_l (index 0 = a_0)
+    n_needed : minimum number of moments required
+
+    Returns
+    -------
+    a_raw : ndarray, shape (n_needed,), normalized so a_0 = 1 (matching
+            legendre_coeffs_from_df's convention; an identically-zero
+            spectrum -- matched-index / no-scattering limit -- stays zero
+            instead of raising a division-by-zero).
+
+    Raises
+    ------
+    TypeError  if pf_data is DataFrame-like (np.asarray would otherwise
+               silently coerce it instead of failing).
+    ValueError if pf_data is not 1-D once materialized, or has fewer than
+               n_needed entries.
+    """
+    if hasattr(pf_data, "iloc"):
+        raise TypeError("pf_type='MOMENTS' requires a plain array, not a DataFrame")
+    a_raw = np.atleast_1d(np.asarray(pf_data, dtype=float))
+    if a_raw.ndim != 1:
+        raise ValueError(
+            "MOMENTS pf_data must be 1-D once materialized for a single "
+            "wavelength, got shape %s" % (a_raw.shape,)
+        )
+    if a_raw.size < n_needed:
+        raise ValueError(
+            "pf_type='MOMENTS' needs at least %d moments, got %d" % (n_needed, a_raw.size)
+        )
+    a_raw = a_raw[:n_needed].copy()
+    a0 = a_raw[0]
+    if np.isclose(a0, 0.0):
+        a_raw[:] = 0.0
+    else:
+        a_raw /= a0
+    return a_raw
+
 def legendre_coeffs_from_df(
         df, *, quad_pts=8, n_mom=None, spline_bc='not-a-knot'):
     """
@@ -105,6 +153,13 @@ def phase_legendre(sample, *, deltam=True):
     * pf_type == 'HG'          : analytic Henyey–Greenstein (fast)
     * pf_type == 'TABULATED'   : DataFrame in sample.pf_data
                                  → Legendre coeffs via helper above
+    * pf_type == 'MOMENTS'     : Legendre moments a_l supplied directly in
+                                 sample.pf_data (bypasses the spline+
+                                 quadrature TABULATED needs -- for callers
+                                 that can evaluate their phase function
+                                 exactly at arbitrary angles and integrate
+                                 it themselves, e.g. via Gauss-Legendre
+                                 quadrature on mu=cos(theta))
     Parameters
     ----------
     sample : iadpython.Sample   (must have quad_pts, nu, etc.)
@@ -141,13 +196,17 @@ def phase_legendre(sample, *, deltam=True):
                                         n_mom=2*n+1)  # (2N+1 , nλ=1)
         a_raw = a_raw.squeeze()                  # 1-D
 
+    # ----------------------------------------------- Direct moments path
+    elif pf_type == "MOMENTS":
+        a_raw = _prepare_moments(sample.pf_data, 2*n+1)
+
     else:
         raise ValueError(f"Unknown pf_type '{pf_type}'")
 
     # -------------------------------------------- optional δ-M trunc
     if deltam:
         f_spike_end = 1 - 1E-10
-        f_spike = float(np.clip(a_raw[2*n], 0.0, f_spike_end)) # clip forward spike fraction to [0, 1)
+        f_spike = float(np.clip(a_raw[n], 0.0, f_spike_end)) # order-n moment; matches Sample._deltaM_forward_fraction (HG: g**n)
         a_use = (a_raw[:n] - f_spike) / (1.0 - f_spike)
         Lmax    = n
         P_use   = P[:Lmax]

@@ -44,6 +44,7 @@ from .constants import *
 from .fresnel import *
 from .start import *
 from .ad import *
+from .layer import *
 from .quadrature import *
 from .combine import *
 from .redistribution import *
