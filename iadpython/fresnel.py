@@ -72,6 +72,20 @@ def interface_rt(n_i, nu_i, n_t):
     transmitted power is obtained from the real Poynting-flux ratio, consistent
     with the wave-optics boundary formulas used elsewhere in the stack.
     """
+    # Identical media have no interface.  Evaluate this analytic limit before
+    # Snell's law and the flux ratios lose precision or become 0/0 at grazing.
+    # Exact equality matters: even a small index contrast reflects at grazing.
+    if (
+        np.ndim(n_i) == 0
+        and np.ndim(n_t) == 0
+        and n_i == n_t
+        and np.isfinite(n_i)
+        and np.real(n_i) > 0
+    ):
+        if np.ndim(nu_i) == 0:
+            return 0.0, 1.0
+        return np.zeros(np.shape(nu_i)), np.ones(np.shape(nu_i))
+
     use_complex = _is_complex_value(n_i, n_t, nu_i)
     if use_complex:
         nu_i_arr = np.asarray(nu_i, dtype=complex)
@@ -431,9 +445,9 @@ def _specular_rt(
 ):
     """Unscattered reflection and transmission through a glass-slab-glass sandwich.
 
-    Light is incident at nu=cos(theta) from air onto a absorbing glass
-    plate onto a slab resting on another absorbing glass plate before
-    exiting into air again.
+    Light is incident at nu=cos(theta) in the external medium n_outer_top
+    onto an absorbing glass plate, then a slab and another glass plate,
+    before exiting into n_outer_bot.  The external media default to air.
 
     If r_top and r_bottom are the reflectances for the top and bottom then
 
@@ -443,14 +457,14 @@ def _specular_rt(
 
     t = t_top*t_bottom*expo / [1-r_top*r_bottom*expo**2]
 
-    where expo = exp(-b_slab/nu)
+    where expo = exp(-b_slab/nu_slab), using the cosine inside the slab.
 
     Args:
         n_top: index of glass slide on top
         n_slab: index of the slab
         n_bot: index of glass on bottom
         b_slab: optical thickness of the slab
-        nu: cosine of angle(s) in slab
+        nu: cosine of incident angle(s) in the external medium n_outer_top
         b_top: optical thickness of top slide
         b_bot: optical thickness of the bottom slide
     Returns
@@ -510,7 +524,8 @@ def specular_rt(
         n_slab: index of the slab
         n_bot: index of glass on bottom
         b_slab: optical thickness of the slab
-        nu: cosine of angle(s) in slab
+        nu: cosine of incident angle(s) in the external medium on the
+            illuminated side: n_outer_top, or n_outer_bot when flip=True
         b_top: optical thickness of top slide
         b_bot: optical thickness of the bottom slide
         flip: True if light hits bottom first

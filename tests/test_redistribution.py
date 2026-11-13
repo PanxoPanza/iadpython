@@ -14,7 +14,7 @@ class redistribution(unittest.TestCase):
         """Isotropic scattering."""
         n = 4
         s = iadpython.ad.Sample(g=0.0, quad_pts=n)
-        hp, hm = iadpython.redistribution.hg_legendre(s)
+        hp, hm = iadpython.redistribution.phase_legendre(s)
 
         np.testing.assert_allclose(hp, np.ones([n, n]))
         np.testing.assert_allclose(hm, np.ones([n, n]))
@@ -128,7 +128,7 @@ class redistribution(unittest.TestCase):
         n = 4
         s = iadpython.ad.Sample(g=0.9, quad_pts=n)
         s.update_quadrature()
-        hp, hm = iadpython.redistribution.hg_legendre(s)
+        hp, hm = iadpython.redistribution.phase_legendre(s)
 
         hh = h[n + 1 :, n + 1 :]
         np.testing.assert_allclose(hp, hh, rtol=1e-4)

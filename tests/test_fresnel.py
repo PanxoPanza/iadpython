@@ -485,8 +485,8 @@ class Specular(unittest.TestCase):
         n_bot = 1.4
         b_slab = np.inf
         nu_i = np.array([0.01, 0.2, 0.5, 0.8, 1.0])  # in air
-        nu_in = iad.cos_snell(1, nu_i, n_slab)  # in slab
-        r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_in)
+        # specular_rt takes the incident cosine in the external medium (air).
+        r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_i)
         rr, _ = iad.absorbing_glass_RT(1, n_top, n_slab, nu_i, 0)
         tt = np.zeros_like(nu_i)
         np.testing.assert_allclose(r, rr, atol=1e-5)
@@ -499,8 +499,8 @@ class Specular(unittest.TestCase):
         n_bot = 1.4
         b_slab = np.inf
         nu_i = np.array([0.01, 0.2, 0.5, 0.8, 1.0])  # in air
-        nu_in = iad.cos_snell(1, nu_i, n_slab)  # in slab
-        r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_in, flip=True)
+        # Flipping changes the illuminated side; its external medium is air.
+        r, t = iad.specular_rt(n_top, n_slab, n_bot, b_slab, nu_i, flip=True)
         rr, _ = iad.absorbing_glass_RT(1, n_bot, n_slab, nu_i, 0)
         tt = np.zeros_like(nu_i)
         np.testing.assert_allclose(r, rr, atol=1e-5)

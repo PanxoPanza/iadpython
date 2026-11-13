@@ -8,15 +8,9 @@ import unittest
 import argparse
 from unittest.mock import patch
 
-# Calculate the path to the iadpython package so pytest works from any directory
+from iadpython import iadcommand
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-iadpython_package_dir = os.path.join(parent_dir, "iadpython")
-sys.path.append(iadpython_package_dir)
-
-# Now we can import iadcommand
-import iadcommand
-
 
 class TestCommandLineArgs(unittest.TestCase):
     """Tests for validator functions."""

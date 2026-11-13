@@ -13,11 +13,11 @@ iadpython = ["data/*.csv"]
 version = { attr = "iadpython.__version__" }
 
 [project]
-name = "iadpython"
+name = "radphen-iadpython"
 dynamic = ["version"]
 authors = [{ name = "Scott Prahl", email = "scott.prahl@oit.edu" }]
 description = "Forward and inverse radiative transport using adding-doubling"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 keywords = [
   "absorption",
   "scattering",
@@ -30,6 +30,7 @@ keywords = [
 ]
 readme = "README.rst"
 license = "MIT"
+license-files = ["LICENSE.txt"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
@@ -39,11 +40,13 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13"
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
 ]
 dependencies = [
-    "scipy",
-    "numpy",
+    "scipy>=1.10",
+    "numpy>=1.24",
+    "pandas>=1.5",
     "matplotlib",
 ]
 
@@ -84,11 +87,11 @@ lite = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/scottprahl/iadpython"
+Homepage = "https://github.com/PanxoPanza/iadpython"
 Documentation = "https://iadpython.readthedocs.io"
-Source = "https://github.com/scottprahl/iadpython"
-Tracker = "https://github.com/scottprahl/iadpython/issues"
-Changelog = "https://github.com/scottprahl/iadpython/blob/main/docs/CHANGELOG.rst"
+Source = "https://github.com/PanxoPanza/iadpython"
+Tracker = "https://github.com/PanxoPanza/iadpython/issues"
+Changelog = "https://github.com/PanxoPanza/iadpython/blob/main/docs/CHANGELOG.rst"
 
 [tool.black]
 line-length = 120

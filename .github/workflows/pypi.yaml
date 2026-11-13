@@ -1,37 +1,69 @@
-# yamllint disable rule:truthy
----
-name: Publish to PyPI
-
+name: Publish radphen-iadpython
 on:
-  release:
-    types: [published]
   workflow_dispatch:
-
+    inputs:
+      confirm-version:
+        description: Type 0.7.0 to publish the validated release tag
+        required: true
+        type: string
+env:
+  OPENBLAS_NUM_THREADS: '1'
+  OMP_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+  NUMEXPR_NUM_THREADS: '1'
+permissions:
+  contents: read
 jobs:
-  build-and-publish:
+  release-gate:
+    if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
-    environment: pypi-repository
-    permissions:
-      contents: read
-      id-token: write
-
+    steps:
+      - name: Require exact release tag and version
+        env:
+          CONFIRM_VERSION: ${{ inputs.confirm-version }}
+          RELEASE_REF: ${{ github.ref }}
+        run: python -c "import os; assert os.environ['CONFIRM_VERSION'] == '0.7.0'; assert os.environ['RELEASE_REF'] == 'refs/tags/v0.7.0'"
+  backend-ci:
+    needs: release-gate
+    if: github.actor == github.repository_owner && github.ref == 'refs/tags/v0.7.0'
+    uses: ./.github/workflows/test.yaml
+  build:
+    needs: backend-ci
+    if: github.actor == github.repository_owner && github.ref == 'refs/tags/v0.7.0'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name || github.ref }}
-
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Build package
+          python-version: '3.14'
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - name: Install and verify built backend
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
-          python -m build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+          python -m pip install dist/*.whl
+          python -m pip check
+          cd "$RUNNER_TEMP"
+          python -I -c "import sys; from pathlib import Path; import iadpython as r; from importlib.resources import files; from importlib.metadata import version, packages_distributions; assert Path(r.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()); assert version('radphen-iadpython') == '0.7.0'; assert 'iadpython' not in [d.lower().replace('_', '-') for d in packages_distributions().get('iadpython', [])]; assert r.__version__ == '0.7.0'; assert files('iadpython').joinpath('data/M38597.csv').is_file(); s = r.Sample(a=0.8, b=1, g=0.5); assert len(s.rt()) == 4; assert len(r.subject_average_reflectance(1)[0]) > 0"
+          iadp --version
+      - uses: actions/upload-artifact@v4
         with:
-          verbose: true
+          name: python-distributions
+          path: dist/
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/radphen-iadpython/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
           attestations: true

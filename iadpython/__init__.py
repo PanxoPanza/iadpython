@@ -37,7 +37,7 @@ __author__ = "Scott Prahl"
 __email__ = "scott.prahl@oit.edu"
 __copyright__ = "2018-2026, Scott Prahl"
 __license__ = "MIT"
-__url__ = "https://github.com/scottprahl/iadpython"
+__url__ = "https://github.com/PanxoPanza/iadpython"
 __version__ = "0.7.0"
 
 from .constants import *

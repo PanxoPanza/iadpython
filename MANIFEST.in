@@ -10,3 +10,6 @@ include iadpython/data/*.csv
 # Test suite + fixtures for reproducible sdist testing
 recursive-include tests *.py
 recursive-include tests/data *.rxt *.txt
+
+include PROVENANCE.md
+recursive-include tools *.py *.md *.json

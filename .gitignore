@@ -21,3 +21,6 @@ iadpython/.ipynb_checkpoints/
 iadp
 
 tests/.ipynb_checkpoints/
+radphen_iadpython/__pycache__/
+radphen_iadpython.egg-info/
+radphen-iadp

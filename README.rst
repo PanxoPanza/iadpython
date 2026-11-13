@@ -1,3 +1,27 @@
+radphen-iadpython
+=================
+
+This is the MIT-licensed RadPhen fork of Scott Prahl's iadpython, maintained
+at https://github.com/PanxoPanza/iadpython for empylib. Distribution version
+0.7.0 retains the original ``iadpython`` import namespace and ``iadp``
+command. The distribution name alone is ``radphen-iadpython``.
+
+Install with ``python -m pip install radphen-iadpython``. For example::
+
+    import iadpython as iad
+    sample = iad.Sample(a=0.9, b=1.0, g=0.5)
+    print(sample.rt())
+
+The fork preserves HG, TABULATED and MOMENTS phase functions, complex sample
+and exterior boundary indices, and diffuse-cone transport from the audited
+source. See PROVENANCE.md for the exact source and release procedure.
+Both distributions provide ``iadpython`` and ``iadp``; install this fork in a
+fresh environment without the upstream ``iadpython`` distribution. They cannot
+coexist safely in one environment because their package paths overlap.
+
+Original upstream README (historical attribution)
+=================================================
+
 .. |pypi| image:: https://img.shields.io/pypi/v/iadpython?color=68CA66
    :target: https://pypi.org/project/iadpython/
    :alt: pypi
