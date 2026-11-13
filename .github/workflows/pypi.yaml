@@ -1,37 +1,18 @@
-# yamllint disable rule:truthy
----
-name: Publish to PyPI
-
+name: Publish radphen-iadpython
 on:
-  release:
-    types: [published]
   workflow_dispatch:
-
+    inputs:
+      confirm-version:
+        description: Type 0.7.0 when dispatching the validated release tag
+        required: true
+        type: string
+permissions:
+  contents: read
 jobs:
-  build-and-publish:
+  dispatch-instructions:
     runs-on: ubuntu-latest
-    environment: pypi-repository
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name || github.ref }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Build package
+      - name: Require release-tag workflow
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
-          python -m build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          verbose: true
-          attestations: true
+          echo 'Dispatch pypi.yaml with --ref v0.7.0 and confirm-version=0.7.0 after backend CI passes.'
+          exit 1
