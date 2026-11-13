@@ -443,9 +443,9 @@ class Sphere:
             (x, y, z) for a random point on the sphere's surface.
         """
         while True:
-            x = random.gauss()
-            y = random.gauss()
-            z = random.gauss()
+            x = random.gauss(0.0, 1.0)
+            y = random.gauss(0.0, 1.0)
+            z = random.gauss(0.0, 1.0)
             r = np.sqrt(x**2 + y**2 + z**2)
             if r > 0:
                 return np.array([x, y, z]) * (self.d / 2) / r

@@ -312,23 +312,54 @@ class Experiment:
 
         if self.search == 'find_ab':
             x = scipy.optimize.Bounds(np.array([0, 0]), np.array([1, np.inf]))
-            _ = scipy.optimize.minimize(abfun, [a, b], args=(self), bounds=x, method="Nelder-Mead")
+            result = scipy.optimize.minimize(abfun, [a, b], args=(self), bounds=x, method="Nelder-Mead")
+            self._refine_two_parameter_fit(result.x, ("a", "b"), x)
 
         if self.search == "find_ag":
             x = scipy.optimize.Bounds(
                 np.array([0, -1 + G_BOUND_EPS]),
                 np.array([1, 1 - G_BOUND_EPS]),
             )
-            _ = scipy.optimize.minimize(agfun, [a, g], args=(self), bounds=x, method="Nelder-Mead")
+            result = scipy.optimize.minimize(agfun, [a, g], args=(self), bounds=x, method="Nelder-Mead")
+            self._refine_two_parameter_fit(result.x, ("a", "g"), x)
 
         if self.search == "find_bg":
             x = scipy.optimize.Bounds(
                 np.array([0, -1 + G_BOUND_EPS]),
                 np.array([np.inf, 1 - G_BOUND_EPS]),
             )
-            _ = scipy.optimize.minimize(bgfun, [b, g], args=(self), bounds=x, method="Nelder-Mead")
+            result = scipy.optimize.minimize(bgfun, [b, g], args=(self), bounds=x, method="Nelder-Mead")
+            self._refine_two_parameter_fit(result.x, ("b", "g"), x)
 
         return self.sample.a, self.sample.b, self.sample.g
+
+    def _refine_two_parameter_fit(self, values, names, bounds):
+        """Refine a stalled L1 fit, retaining only a smaller measured residual.
+
+        At conservative-albedo boundaries, R+T is constant and the L1
+        objective can have a flat plateau. A bounded residual-vector fit can
+        leave that plateau even when Nelder-Mead reports successful convergence.
+        Always restore the selected parameters after optimizer trial evaluations.
+        """
+        def residual(parameters):
+            for name, value in zip(names, parameters):
+                setattr(self.sample, name, value)
+            measured = self.measured_rt()
+            return np.asarray(measured) - np.asarray((self.m_r, self.m_t))
+
+        selected = np.asarray(values, dtype=float).copy()
+        distance = np.sum(np.abs(residual(selected)))
+        if distance > self.tolerance:
+            candidate = scipy.optimize.least_squares(
+                residual, selected, bounds=(bounds.lb, bounds.ub)
+            )
+            if np.all(np.isfinite(candidate.x)):
+                candidate_distance = np.sum(np.abs(residual(candidate.x)))
+                if np.isfinite(candidate_distance) and candidate_distance < distance:
+                    selected = candidate.x
+
+        for name, value in zip(names, selected):
+            setattr(self.sample, name, value)
 
     def print_dot(self):
         """Print a character for each datapoint during analysis."""

@@ -78,6 +78,37 @@ if (
 """
 
 
+APPROVED_INVERSE_HELPER = '''
+def _refine_two_parameter_fit(self, values, names, bounds):
+        """Refine a stalled L1 fit, retaining only a smaller measured residual.
+
+        At conservative-albedo boundaries, R+T is constant and the L1
+        objective can have a flat plateau. A bounded residual-vector fit can
+        leave that plateau even when Nelder-Mead reports successful convergence.
+        Always restore the selected parameters after optimizer trial evaluations.
+        """
+        def residual(parameters):
+            for name, value in zip(names, parameters):
+                setattr(self.sample, name, value)
+            measured = self.measured_rt()
+            return np.asarray(measured) - np.asarray((self.m_r, self.m_t))
+
+        selected = np.asarray(values, dtype=float).copy()
+        distance = np.sum(np.abs(residual(selected)))
+        if distance > self.tolerance:
+            candidate = scipy.optimize.least_squares(
+                residual, selected, bounds=(bounds.lb, bounds.ub)
+            )
+            if np.all(np.isfinite(candidate.x)):
+                candidate_distance = np.sum(np.abs(residual(candidate.x)))
+                if np.isfinite(candidate_distance) and candidate_distance < distance:
+                    selected = candidate.x
+
+        for name, value in zip(names, selected):
+            setattr(self.sample, name, value)
+'''
+
+
 class RemoveFunctionDocstrings(ast.NodeTransformer):
     """Allow documentation corrections, preserving all executable statements."""
 
@@ -90,6 +121,36 @@ class RemoveFunctionDocstrings(ast.NodeTransformer):
         return node
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+
+def apply_approved_sphere_delta(tree):
+    sphere = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Sphere")
+    uniform = next(n for n in sphere.body if isinstance(n, ast.FunctionDef) and n.name == "uniform")
+    calls = [n for n in ast.walk(uniform) if isinstance(n, ast.Call)
+             and ast.dump(n.func) == ast.dump(ast.parse("random.gauss()", mode="eval").body.func)]
+    assert len(calls) == 3 and all(not n.args and not n.keywords for n in calls)
+    for call in calls:
+        call.args = [ast.Constant(0.0), ast.Constant(1.0)]
+
+
+def apply_approved_inverse_delta(tree):
+    experiment = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Experiment")
+    inverse = next(n for n in experiment.body if isinstance(n, ast.FunctionDef) and n.name == "invert_scalar_rt")
+    for search, objective, parameters in [("find_ab", "abfun", ("a", "b")),
+                                          ("find_ag", "agfun", ("a", "g")),
+                                          ("find_bg", "bgfun", ("b", "g"))]:
+        branch = next(n for n in inverse.body if isinstance(n, ast.If)
+                      and ast.dump(n.test) == ast.dump(ast.parse(f"self.search == {search!r}", mode="eval").body))
+        assignment = branch.body[-1]
+        assert isinstance(assignment, ast.Assign)
+        expected = ast.parse(f"_ = scipy.optimize.minimize({objective}, [{', '.join(parameters)}], args=(self), bounds=x, method='Nelder-Mead')").body[0]
+        assert ast.dump(assignment) == ast.dump(expected)
+        assignment.targets = [ast.Name(id="result", ctx=ast.Store())]
+        branch.body.append(ast.parse(f"self._refine_two_parameter_fit(result.x, {parameters!r}, x)").body[0])
+    assert not any(isinstance(n, ast.FunctionDef) and n.name == "_refine_two_parameter_fit" for n in experiment.body)
+    before = next(i for i, n in enumerate(experiment.body) if isinstance(n, ast.FunctionDef) and n.name == "print_dot")
+    helper = RemoveFunctionDocstrings().visit(ast.parse(APPROVED_INVERSE_HELPER)).body[0]
+    experiment.body.insert(before, helper)
 
 
 def check_source(original_repo, fork_root):
@@ -113,18 +174,26 @@ def check_source(original_repo, fork_root):
                 assert len(functions) == 1
                 functions[0].body.insert(0, ast.parse(MATCHED_INTERFACE_GUARD).body[0])
                 approved += 1
+            elif name == "iadpython/sphere.py":
+                apply_approved_sphere_delta(expected_tree)
+                approved += 1
+            elif name == "iadpython/iad.py":
+                apply_approved_inverse_delta(expected_tree)
+                approved += 1
             assert ast.dump(expected_tree) == ast.dump(actual_tree), name
             count += 1
         else:
             assert target.read_bytes() == original, name
-    assert count == 21 and approved == 1
+    assert count == 21 and approved == 3
     license_bytes = subprocess.check_output([
         "git", "-C", original_repo, "show", f"{SOURCE_SHA}:LICENSE.txt"
     ])
     assert (Path(fork_root) / "LICENSE.txt").read_bytes() == license_bytes
-    print(f"Audited {count} modules: 20 unchanged executable ASTs; fresnel.py matches "
-          "the exact approved interface_rt matched-media guard plus baseline AST. "
-          "Only function docstrings/source URL normalized; resources and MIT license byte-identical")
+    print(f"Audited {count} modules: 18 unchanged executable ASTs; exact approved deltas "
+          "in fresnel.interface_rt (matched-media guard), Sphere.uniform (three explicit "
+          "Gaussian defaults), and Experiment.invert_scalar_rt (three result/refinement "
+          "calls plus the exact fallback helper). Only function docstrings/source URL "
+          "normalized; resources and MIT license byte-identical")
 
 
 if __name__ == "__main__":

@@ -22,11 +22,13 @@ boundaries, normal and Lambertian transport, unscattered transport, diffuse
 cone transport, and full reflection/transmission matrices. Comparison uses
 rtol=1e-10 and atol=1e-12, prints maximum absolute and relative differences
 (relative denominator floored at 1e-12), and currently reports exact equality.
-The source check audits every module against the exact SHA. It inserts only
-the explicit approved matched-interface guard into the baseline AST, then
-requires the complete resulting AST to match. Only function docstrings and
-source URL attribution are normalized; no function/file is silently exempted.
-The other 20 executable module ASTs match their baseline unchanged. Runtime
+The source check audits every module against the exact SHA. It applies only
+three explicit expected AST patches to the baseline: the matched-interface
+guard; three standard-normal random.gauss argument pairs; and the three
+inverse result/refinement calls plus the literal approved fallback helper.
+It then requires each complete module AST to match. Only function docstrings
+and source URL attribution are normalized; no function/file is exempted.
+The other 18 executable module ASTs match their baseline unchanged. Runtime
 resources and the MIT license are checked byte for byte. The original fixture
 is preserved; renamed.json is the newly recorded fork fixture.
 

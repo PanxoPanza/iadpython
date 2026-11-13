@@ -10,13 +10,25 @@ The original MIT copyright and license remain verbatim in LICENSE.txt and
 are included in wheels and source distributions. Package author and numerical
 code attribution remain Scott Prahl; RadPhen maintains this distribution.
 
-This release changes distribution metadata and release tooling, and includes
-one reviewed numerical correction: `interface_rt` returns the analytic R=0,
-T=1 limit for identical finite positive-real-part scalar media, including
-exact grazing incidence. The exact guard is audited in tools/compare_backend.py;
-the remainder of all 21 module executable ASTs matches the source commit.
-Function docstrings clarify the external incident-cosine convention. HG,
-TABULATED and MOMENTS phase functions and complex boundaries are preserved.
+This release changes distribution metadata and release tooling and includes
+three narrowly reviewed source corrections, each audited explicitly against
+the source commit by tools/compare_backend.py:
+
+- `interface_rt` returns analytic R=0, T=1 for identical finite positive-real-part
+  scalar media, including exact grazing incidence.
+- `Sphere.uniform` passes explicit `(0.0, 1.0)` to three `random.gauss` calls,
+  retaining the standard-normal sampling while supporting Python 3.10.
+- Three two-parameter inverse searches retain their Nelder-Mead objectives,
+  then recompute the selected point's L1 residual. Only when it exceeds the
+  existing tolerance does a bounded least-squares residual-vector fit run.
+  A candidate is accepted only for finite parameters and a finite, strictly
+  smaller L1 residual. Selected parameters are explicitly restored after trials.
+  This escapes flat L1 plateaus near conservative albedo; scalar searches,
+  initialization, measurement physics and acceptance tolerance are unchanged.
+
+The remaining 18 executable module ASTs match the source commit. Function
+docstrings clarify the external incident-cosine convention. HG, TABULATED,
+MOMENTS and complex-boundary forward fixtures remain unchanged.
 See tools/README.md for reproducible source and fixture checks.
 
 The original import and CLI are retained. Do not install upstream `iadpython`
@@ -61,3 +73,18 @@ selection passes 71 tests. No test exclusions or xfails were added. Numerical
 fixtures remain exactly equal for all six cases and 816 recorded values.
 The full inherited suite is a separate required CI gate; the earlier bounded,
 incomplete run is not a passing result. Publication requires that gate to pass.
+
+## Additional findings from the first full GitHub CI
+
+Full CI for initial packaging commit 78d24 found five failing tests on Python
+3.10 (four sphere tests reached zero-argument random.gauss and one inverse
+roundtrip stalled), and one inverse-roundtrip failure on Python 3.14. These
+were additional inherited issues beyond the initial seven targeted failures.
+They motivated the explicit Gaussian-default compatibility correction and
+bounded inverse-fit refinement above, rather than relaxed tolerances or skips.
+The sphere selection passes 13 tests on both Python 3.10 and 3.14. Five new
+inverse boundary/control regressions pass, checking real measured transport at
+g=-0.9, 0 and 0.9, rejection/restoration of a worse candidate, and no fallback
+for an already adequate fit. The unchanged full zero-sphere inverse-roundtrip file also passes all six tests.
+Full CI after these corrections remains required;
+the first failing CI is not evidence of a complete passing release.
